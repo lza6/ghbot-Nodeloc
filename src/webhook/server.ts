@@ -8,6 +8,7 @@ import { parseWebhookMentionEvent, processWebhookMention } from "./processor.js"
 
 const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
 const DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
+const MAX_TASK_ATTEMPTS = 2;
 
 export type WebhookDeliveryHandler = (
   eventName: string,
@@ -170,6 +171,7 @@ function createDefaultDeliveryHandler(botName: string): WebhookDeliveryHandler {
 class WebhookTaskQueue {
   private readonly pending: Array<{ deliveryId: string; run: () => Promise<void> }> = [];
   private readonly seen = new Map<string, number>();
+  private readonly attempts = new Map<string, number>();
   private active = 0;
 
   constructor(
@@ -197,11 +199,24 @@ class WebhookTaskQueue {
       this.active += 1;
       void task
         .run()
+        .then(() => {
+          this.attempts.delete(task.deliveryId);
+        })
         .catch((error) => {
-          // Keep completed deliveries deduplicated, but allow GitHub to retry
-          // a delivery whose background handler failed.
+          // Retry the failed handler up to MAX_TASK_ATTEMPTS in-process before
+          // releasing the delivery so GitHub can redeliver it.
+          const attempt = (this.attempts.get(task.deliveryId) ?? 0) + 1;
+          logger.error(
+            { error, deliveryId: task.deliveryId, attempt },
+            "GitHub webhook delivery failed."
+          );
+          if (attempt < MAX_TASK_ATTEMPTS) {
+            this.attempts.set(task.deliveryId, attempt);
+            this.pending.push(task);
+            return;
+          }
+          this.attempts.delete(task.deliveryId);
           this.seen.delete(task.deliveryId);
-          logger.error({ error, deliveryId: task.deliveryId }, "GitHub webhook delivery failed.");
         })
         .finally(() => {
           this.active -= 1;
