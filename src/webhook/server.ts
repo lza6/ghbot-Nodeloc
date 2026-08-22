@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { createGitHubAppInstallationCredentials } from "../github/client.js";
 import { logger } from "../logger.js";
 import { parseWebhookMentionEvent, processWebhookMention } from "./processor.js";
+import { MetricsRegistry } from "./metrics.js";
 
 const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
 const DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -42,7 +43,10 @@ export function verifyGitHubWebhookSignature(
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-export function createWebhookServer(options: WebhookServerOptions): http.Server {
+export function createWebhookServer(
+  options: WebhookServerOptions,
+  metrics: MetricsRegistry = new MetricsRegistry()
+): http.Server {
   if (!options.secret) {
     throw new Error("WEBHOOK_SECRET is required to create the GitHub webhook server.");
   }
@@ -61,6 +65,11 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
       writeJson(response, 200, { ok: true, webhook: true });
       return;
     }
+    if (request.method === "GET" && pathname === "/metrics") {
+      response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
+      response.end(metrics.snapshotPrometheus());
+      return;
+    }
     if (request.method !== "POST" || pathname !== webhookPath) {
       response.setHeader("allow", "GET, POST");
       writeJson(response, 404, { error: "Not found." });
@@ -71,6 +80,7 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
     const eventName = singleHeader(request.headers["x-github-event"]);
     const signature = singleHeader(request.headers["x-hub-signature-256"]);
     if (!deliveryId || !eventName || !signature) {
+      metrics.inc("webhook_requests_total", { result: "missing_headers" });
       writeJson(response, 400, { error: "Missing GitHub webhook headers." });
       return;
     }
@@ -83,10 +93,12 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
         { error, deliveryId, eventName },
         "Rejected oversized or unreadable GitHub webhook body."
       );
+      metrics.inc("webhook_requests_total", { result: "too_large" });
       writeJson(response, 413, { error: "Webhook payload is too large." });
       return;
     }
     if (!verifyGitHubWebhookSignature(body, signature, options.secret)) {
+      metrics.inc("webhook_requests_total", { result: "bad_signature" });
       writeJson(response, 401, { error: "Invalid webhook signature." });
       return;
     }
@@ -104,14 +116,17 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
         handleDelivery(eventName, payload, deliveryId)
       );
       if (!accepted) {
+        metrics.inc("webhook_deliveries_total", { result: "duplicate" });
         writeJson(response, 202, { ok: true, duplicate: true });
         return;
       }
+      metrics.inc("webhook_deliveries_total", { event: eventName, result: "accepted" });
     } catch (error) {
       logger.warn(
         { error, deliveryId, eventName },
         "Webhook queue is full; asking GitHub to retry."
       );
+      metrics.inc("webhook_deliveries_total", { result: "queue_full" });
       writeJson(response, 503, { error: "Webhook queue is temporarily full." });
       return;
     }

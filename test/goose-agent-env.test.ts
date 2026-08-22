@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildGooseAgentEnvironment, extractGooseFinalText, redactProcessArgs } from "../src/ai/gooseCli.js";
+import {
+  buildGooseAgentEnvironment,
+  extractGooseFinalText,
+  redactProcessArgs
+} from "../src/ai/gooseCli.js";
 import { config } from "../src/config.js";
 
 const originalEffort = config.gooseThinkingEffort;
@@ -38,7 +42,7 @@ test("extractGooseFinalText strips a surrounding markdown fence", () => {
     messages: [
       {
         role: "assistant",
-        content: [{ type: "text", text: "```json\n{\"ok\":true}\n```" }]
+        content: [{ type: "text", text: '```json\n{"ok":true}\n```' }]
       }
     ]
   });
