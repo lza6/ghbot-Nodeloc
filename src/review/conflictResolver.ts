@@ -8,6 +8,7 @@ import { runGooseAgent, runGoosePrompt, runIsolatedWorkspaceCommand } from "../a
 import { createRepositorySnapshot } from "../chat/processor.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
+import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
 import {
   loadRepositoryKnowledge,
   REPOSITORY_KNOWLEDGE_SCRATCH_PATH,
@@ -936,25 +937,9 @@ async function initializeSnapshotGitRepository(snapshot: string): Promise<void> 
 }
 
 function validateAgentChangePath(relativePath: string): void {
-  const segments = relativePath.toLowerCase().split("/");
+  const segments = relativePath.split("/");
   const basename = segments.at(-1) ?? "";
-  if (
-    segments.some((segment) =>
-      [".git", ".ghbot", ".goose", ".opencode", ".agents", ".codex", ".claude", ".cursor"].includes(
-        segment
-      )
-    ) ||
-    basename === ".env" ||
-    basename.startsWith(".env.") ||
-    [
-      "agents.md",
-      "claude.md",
-      "gemini.md",
-      ".goosehints",
-      "opencode.json",
-      "opencode.jsonc"
-    ].includes(basename)
-  ) {
+  if (hasProtectedSegment(segments) || isProtectedBasename(basename)) {
     throw new Error(`goose attempted to change a protected path: ${relativePath}`);
   }
 }

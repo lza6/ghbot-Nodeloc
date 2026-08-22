@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { containsSecret } from "../security/secrets.js";
 
 export const REPOSITORY_KNOWLEDGE_CACHE_PATH = ".ghbot-knowledge/repository.md";
 export const REPOSITORY_KNOWLEDGE_SCRATCH_PATH = ".ghbot/repository-knowledge.md";
@@ -68,14 +69,7 @@ export function validateRepositoryKnowledge(content: string): void {
     throw new Error("Repository knowledge must be plain text.");
   }
 
-  const secretPatterns = [
-    /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
-    /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/,
-    /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
-    /\bsk-[A-Za-z0-9_-]{20,}\b/,
-    /\bBearer\s+[A-Za-z0-9._~+/=-]{20,}\b/i
-  ];
-  if (secretPatterns.some((pattern) => pattern.test(content))) {
+  if (containsSecret(content)) {
     throw new Error("Repository knowledge appears to contain a credential or private key.");
   }
 }

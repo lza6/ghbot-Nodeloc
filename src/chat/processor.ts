@@ -16,6 +16,7 @@ import {
   saveRepositoryKnowledgeCache,
   writeKnowledgeScratch
 } from "../repository/knowledge.js";
+import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
 
 const CHAT_MARKER_PREFIX = "<!-- ghbot-chat:v1";
 const MAX_REPLY_CHARS = 60_000;
@@ -345,28 +346,7 @@ export async function createRepositorySnapshot(sourceWorktree: string): Promise<
         const relativePath = path.relative(sourceRoot, source);
         const segments = relativePath.split(path.sep);
         const basename = path.basename(source).toLowerCase();
-        if (
-          segments.includes(".git") ||
-          segments.includes(".goose") ||
-          segments.includes(".opencode") ||
-          segments.includes(".agents") ||
-          segments.includes(".claude") ||
-          segments.includes(".codex") ||
-          segments.includes(".cursor") ||
-          segments.includes(".ghbot") ||
-          [
-            "opencode.json",
-            "opencode.jsonc",
-            ".goosehints",
-            "agents.md",
-            "claude.md",
-            "gemini.md",
-            ".cursorrules",
-            ".windsurfrules"
-          ].includes(basename) ||
-          basename === ".env" ||
-          basename.startsWith(".env.")
-        ) {
+        if (hasProtectedSegment(segments) || isProtectedBasename(basename)) {
           return false;
         }
 
