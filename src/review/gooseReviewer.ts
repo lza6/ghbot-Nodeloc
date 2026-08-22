@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { runGoosePrompt } from "../ai/gooseCli.js";
 import { config } from "../config.js";
+import { logger } from "../logger.js";
 import { withRetry } from "../retry.js";
 import type { PullRequestFile, ReviewDecision, ReviewMode } from "../types.js";
 import type { PreviousReview } from "./cache.js";
+import { normalizeReviewDecision } from "./normalize.js";
 
 const findingSchema = z.object({
   path: z.string(),
@@ -37,7 +39,15 @@ export class GooseReviewer {
       "goose.run.review",
       async () => {
         const raw = await runGoosePrompt(buildPrompt(input));
-        return reviewDecisionSchema.parse(JSON.parse(raw));
+        const parsed = reviewDecisionSchema.parse(JSON.parse(raw));
+        const { decision, warnings } = normalizeReviewDecision(
+          parsed,
+          input.files.map((file) => file.filename)
+        );
+        if (warnings.length > 0) {
+          logger.warn({ warnings }, "Review output contained findings that could not be posted inline.");
+        }
+        return decision;
       },
       { maxAttempts: 3 }
     );
