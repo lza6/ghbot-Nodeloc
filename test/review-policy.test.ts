@@ -94,14 +94,16 @@ test("review state markers round trip", () => {
     ...cleanDecision,
     review: [{ path: "src/a.ts", line: 1, title: "Check", body: "Note" }]
   });
-  assert.deepEqual(
-    parseReviewStateMarker(formatReviewStateMarker("strict", disposition, 1, 0)),
-    { mode: "strict", outcome: "pass", requiresAdminApproval: false }
-  );
-  assert.deepEqual(
-    parseReviewExternalId(formatReviewExternalId("normal", disposition)),
-    { mode: "normal", outcome: "pass", requiresAdminApproval: false }
-  );
+  assert.deepEqual(parseReviewStateMarker(formatReviewStateMarker("strict", disposition, 1, 0)), {
+    mode: "strict",
+    outcome: "pass",
+    requiresAdminApproval: false
+  });
+  assert.deepEqual(parseReviewExternalId(formatReviewExternalId("normal", disposition)), {
+    mode: "normal",
+    outcome: "pass",
+    requiresAdminApproval: false
+  });
   assert.deepEqual(
     parseReviewExternalId("ghbot-review:v1:mode=lenient:outcome=pass:requires-admin=false"),
     { mode: "normal", outcome: "pass", requiresAdminApproval: false }
@@ -134,11 +136,41 @@ test("only the latest decisive review per user can approve the current head", ()
   assert.deepEqual(
     approvedLoginsForHead(
       [
-        { id: 1, state: "APPROVED", commitId: "head", login: "alice", submittedAt: "2026-08-13T01:00:00Z" },
-        { id: 2, state: "COMMENTED", commitId: "head", login: "alice", submittedAt: "2026-08-13T02:00:00Z" },
-        { id: 3, state: "APPROVED", commitId: "old-head", login: "bob", submittedAt: "2026-08-13T03:00:00Z" },
-        { id: 4, state: "APPROVED", commitId: "head", login: "carol", submittedAt: "2026-08-13T04:00:00Z" },
-        { id: 5, state: "CHANGES_REQUESTED", commitId: "head", login: "carol", submittedAt: "2026-08-13T05:00:00Z" }
+        {
+          id: 1,
+          state: "APPROVED",
+          commitId: "head",
+          login: "alice",
+          submittedAt: "2026-08-13T01:00:00Z"
+        },
+        {
+          id: 2,
+          state: "COMMENTED",
+          commitId: "head",
+          login: "alice",
+          submittedAt: "2026-08-13T02:00:00Z"
+        },
+        {
+          id: 3,
+          state: "APPROVED",
+          commitId: "old-head",
+          login: "bob",
+          submittedAt: "2026-08-13T03:00:00Z"
+        },
+        {
+          id: 4,
+          state: "APPROVED",
+          commitId: "head",
+          login: "carol",
+          submittedAt: "2026-08-13T04:00:00Z"
+        },
+        {
+          id: 5,
+          state: "CHANGES_REQUESTED",
+          commitId: "head",
+          login: "carol",
+          submittedAt: "2026-08-13T05:00:00Z"
+        }
       ],
       "head"
     ),

@@ -1,6 +1,9 @@
 import type { PullRequestFile } from "../types.js";
 
-export function compactFilesForReview(files: PullRequestFile[], maxPatchChars: number): PullRequestFile[] {
+export function compactFilesForReview(
+  files: PullRequestFile[],
+  maxPatchChars: number
+): PullRequestFile[] {
   let remaining = maxPatchChars;
 
   return files.map((file) => {

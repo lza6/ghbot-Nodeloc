@@ -18,7 +18,7 @@ const GOOSE_CONTAINER_BOOTSTRAP = [
   "cleanup_workspace() { chmod -R a+rwX /workspace 2>/dev/null || true; }",
   "trap cleanup_workspace EXIT",
   'mkdir -p "$HOME"',
-  'git config --global --add safe.directory /workspace',
+  "git config --global --add safe.directory /workspace",
   "if ! command -v goose >/dev/null 2>&1; then",
   "  curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh -o /tmp/download_cli.sh",
   `  if ! GOOSE_VERSION="${GOOSE_DOCKER_VERSION}" GOOSE_BIN_DIR=/tmp/goose-bin CONFIGURE=false bash /tmp/download_cli.sh >/tmp/goose-install.log 2>&1; then`,
@@ -208,9 +208,7 @@ export function buildGooseAgentEnvironment(params: {
     OPENAI_API_KEY: params.apiToken,
     OPENAI_BASE_URL: `http://host.docker.internal:${params.proxyPort}/v1`,
     OPENAI_TIMEOUT: "600",
-    ...(config.gooseThinkingEffort
-      ? { GOOSE_THINKING_EFFORT: config.gooseThinkingEffort }
-      : {})
+    ...(config.gooseThinkingEffort ? { GOOSE_THINKING_EFFORT: config.gooseThinkingEffort } : {})
   };
 }
 
@@ -365,7 +363,10 @@ async function resolveHostGooseBinary(): Promise<string | undefined> {
       throw new Error("configured Goose binary is not a mountable file path");
     }
     await fs.access(resolvedPath, fsConstants.X_OK);
-    logger.info({ hostGooseBinary: resolvedPath }, "Using the workflow Goose binary inside the agent container.");
+    logger.info(
+      { hostGooseBinary: resolvedPath },
+      "Using the workflow Goose binary inside the agent container."
+    );
     return resolvedPath;
   } catch (error) {
     logger.warn(
@@ -394,9 +395,7 @@ function buildGooseEnv(tempDir: string): Record<string, string> {
     OPENAI_API_KEY: config.gooseApiKey ?? "",
     OPENAI_BASE_URL: normalizeBaseUrl(config.gooseBaseUrl),
     OPENAI_TIMEOUT: "600",
-    ...(config.gooseThinkingEffort
-      ? { GOOSE_THINKING_EFFORT: config.gooseThinkingEffort }
-      : {})
+    ...(config.gooseThinkingEffort ? { GOOSE_THINKING_EFFORT: config.gooseThinkingEffort } : {})
   };
 }
 
@@ -448,10 +447,9 @@ async function runProcess(
       finished = true;
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
-      reject(Object.assign(
-        new Error(`${label} timed out after ${timeoutMs}ms.`),
-        { stdout, stderr }
-      ));
+      reject(
+        Object.assign(new Error(`${label} timed out after ${timeoutMs}ms.`), { stdout, stderr })
+      );
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer | string) => {

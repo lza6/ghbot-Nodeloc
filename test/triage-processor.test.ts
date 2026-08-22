@@ -85,23 +85,27 @@ test("pull request evidence loads bounded recent commits and all comment kinds",
         listReviews: async () => {
           calls.push("reviews");
           return {
-            data: [{
-              user: { login: "reviewer" },
-              state: "COMMENTED",
-              body: "Review summary",
-              submitted_at: "2026-08-14T00:00:00Z"
-            }]
+            data: [
+              {
+                user: { login: "reviewer" },
+                state: "COMMENTED",
+                body: "Review summary",
+                submitted_at: "2026-08-14T00:00:00Z"
+              }
+            ]
           };
         },
         listReviewComments: async () => {
           calls.push("review-comments");
           return {
-            data: [{
-              user: { login: "inline-reviewer" },
-              path: "src/navigation.ts",
-              body: "Inline compatibility concern",
-              created_at: "2026-08-14T00:01:00Z"
-            }]
+            data: [
+              {
+                user: { login: "inline-reviewer" },
+                path: "src/navigation.ts",
+                body: "Inline compatibility concern",
+                created_at: "2026-08-14T00:01:00Z"
+              }
+            ]
           };
         }
       },
@@ -109,11 +113,13 @@ test("pull request evidence loads bounded recent commits and all comment kinds",
         listComments: async () => {
           calls.push("comments");
           return {
-            data: [{
-              user: { login: "maintainer" },
-              body: "Conversation context",
-              created_at: "2026-08-14T00:02:00Z"
-            }]
+            data: [
+              {
+                user: { login: "maintainer" },
+                body: "Conversation context",
+                created_at: "2026-08-14T00:02:00Z"
+              }
+            ]
           };
         }
       }
@@ -136,17 +142,21 @@ function evidence(number: number, commitMessage: string, commentBody: string): P
     number,
     commits: [{ sha: `${number}-sha`, message: commitMessage, author: "contributor" }],
     comments: [{ author: "maintainer", body: commentBody, createdAt: "2026-08-14T00:00:00Z" }],
-    reviews: [{
-      author: "reviewer",
-      state: "COMMENTED",
-      body: "Review context",
-      submittedAt: "2026-08-14T00:00:00Z"
-    }],
-    reviewComments: [{
-      author: "reviewer",
-      path: "src/navigation.ts",
-      body: "Inline review context",
-      createdAt: "2026-08-14T00:00:00Z"
-    }]
+    reviews: [
+      {
+        author: "reviewer",
+        state: "COMMENTED",
+        body: "Review context",
+        submittedAt: "2026-08-14T00:00:00Z"
+      }
+    ],
+    reviewComments: [
+      {
+        author: "reviewer",
+        path: "src/navigation.ts",
+        body: "Inline review context",
+        createdAt: "2026-08-14T00:00:00Z"
+      }
+    ]
   };
 }

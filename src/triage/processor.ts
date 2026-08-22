@@ -138,9 +138,10 @@ async function processTriage(
   params: { owner: string; repo: string; kind: TriageKind; target: TriageTarget }
 ): Promise<void> {
   const candidates = await listCandidates(octokit, params);
-  const result = params.kind === "pull_request"
-    ? await triagePullRequestInTwoStages(octokit, params, candidates)
-    : await runSingleStageTriage(params.kind, params.target, candidates);
+  const result =
+    params.kind === "pull_request"
+      ? await triagePullRequestInTwoStages(octokit, params, candidates)
+      : await runSingleStageTriage(params.kind, params.target, candidates);
   const allowedLabels = new Set(config.triageLabels);
   const selectedLabels = [...new Set(result.labels.filter((label) => allowedLabels.has(label)))];
   if (selectedLabels.length === 0) {
@@ -255,15 +256,19 @@ async function triagePullRequestInTwoStages(
   const duplicate = await withRetry(
     "goose.run.triage.fine",
     async () => {
-      const raw = await runGoosePrompt(buildPullRequestDuplicatePrompt({
-        target: params.target,
-        targetEvidence,
-        candidates: selectedCandidates,
-        candidateEvidence
-      }));
+      const raw = await runGoosePrompt(
+        buildPullRequestDuplicatePrompt({
+          target: params.target,
+          targetEvidence,
+          candidates: selectedCandidates,
+          candidateEvidence
+        })
+      );
       const decision = duplicateDecisionSchema.parse(JSON.parse(raw));
       if (decision.number !== null && !candidateNumbers.includes(decision.number)) {
-        throw new Error("goose fine triage selected a pull request outside the coarse candidate set.");
+        throw new Error(
+          "goose fine triage selected a pull request outside the coarse candidate set."
+        );
       }
       if (decision.confidence === "none" && decision.number !== null) {
         throw new Error("goose fine triage returned a duplicate number with confidence=none.");
@@ -460,7 +465,11 @@ export function buildPullRequestDuplicatePrompt(params: {
   ].join("\n");
 }
 
-function buildTriagePrompt(kind: TriageKind, target: TriageTarget, candidates: TriageCandidate[]): string {
+function buildTriagePrompt(
+  kind: TriageKind,
+  target: TriageTarget,
+  candidates: TriageCandidate[]
+): string {
   return [
     `You are triaging a GitHub ${kind === "issue" ? "issue" : "pull request"}.`,
     "Return only one valid JSON object with exactly: labels, summary, duplicate.",
@@ -487,7 +496,12 @@ function buildTriagePrompt(kind: TriageKind, target: TriageTarget, candidates: T
   ].join("\n");
 }
 
-async function ensureLabelsExist(octokit: Octokit, owner: string, repo: string, labels: string[]): Promise<void> {
+async function ensureLabelsExist(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  labels: string[]
+): Promise<void> {
   const existing = await octokit.paginate(octokit.rest.issues.listLabelsForRepo, {
     owner,
     repo,
@@ -506,7 +520,10 @@ async function ensureLabelsExist(octokit: Octokit, owner: string, repo: string, 
         repo,
         name: label,
         color: label === config.triageDuplicateLabel ? "cfd3d7" : "ededed",
-        description: label === config.triageDuplicateLabel ? "Potential duplicate identified by ghbot" : "Managed by ghbot triage"
+        description:
+          label === config.triageDuplicateLabel
+            ? "Potential duplicate identified by ghbot"
+            : "Managed by ghbot triage"
       });
     });
     existingNames.add(label);
@@ -555,5 +572,5 @@ async function postDuplicateFeedback(
 }
 
 function labelName(label: string | { name?: string | null }): string {
-  return typeof label === "string" ? label : label.name ?? "";
+  return typeof label === "string" ? label : (label.name ?? "");
 }

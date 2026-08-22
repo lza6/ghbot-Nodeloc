@@ -51,7 +51,9 @@ test("persistent cache restores and saves validated repository and PR state", as
   const objects = new Map<string, Buffer>();
   const storage: PersistentObjectStore = {
     download: async (key) => objects.get(key),
-    upload: async ({ key, body }) => { objects.set(key, Buffer.from(body)); }
+    upload: async ({ key, body }) => {
+      objects.set(key, Buffer.from(body));
+    }
   };
 
   try {
@@ -112,7 +114,9 @@ test("persistent cache does not overwrite newer repository knowledge when this r
   ]);
   const storage: PersistentObjectStore = {
     download: async (key) => objects.get(key),
-    upload: async ({ key, body }) => { objects.set(key, Buffer.from(body)); }
+    upload: async ({ key, body }) => {
+      objects.set(key, Buffer.from(body));
+    }
   };
 
   try {
@@ -146,12 +150,9 @@ test("persistent cache does not overwrite newer repository knowledge when this r
       "# Newer knowledge\n\nKeep the Lite branch facts.\n"
     );
     assert.ok(objects.has(pullRequestReviewObjectKey("12345", 17, "forum-114614")));
-    assert.ok(objects.has(pullRequestReviewHistoryObjectKey(
-      "12345",
-      17,
-      "b".repeat(40),
-      "forum-114614"
-    )));
+    assert.ok(
+      objects.has(pullRequestReviewHistoryObjectKey("12345", 17, "b".repeat(40), "forum-114614"))
+    );
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -161,16 +162,19 @@ test("persistent cache rejects a review object belonging to another repository",
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ghbot-r2-invalid-"));
   const key = pullRequestReviewObjectKey("12345", 17);
   const storage: PersistentObjectStore = {
-    download: async (requestedKey) => requestedKey === key
-      ? Buffer.from(JSON.stringify({
-          version: 1,
-          repository: "attacker/fork",
-          pullNumber: 17,
-          headSha: "b".repeat(40),
-          reviewedAt: new Date().toISOString(),
-          decision
-        }))
-      : undefined,
+    download: async (requestedKey) =>
+      requestedKey === key
+        ? Buffer.from(
+            JSON.stringify({
+              version: 1,
+              repository: "attacker/fork",
+              pullNumber: 17,
+              headSha: "b".repeat(40),
+              reviewedAt: new Date().toISOString(),
+              decision
+            })
+          )
+        : undefined,
     upload: async () => undefined
   };
   try {

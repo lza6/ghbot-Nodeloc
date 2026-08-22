@@ -1,6 +1,8 @@
 import http from "node:http";
+import type { Socket } from "node:net";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { Readable } from "node:stream";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { logger } from "../logger.js";
 
 export async function startOneRunApiProxy(
@@ -9,7 +11,7 @@ export async function startOneRunApiProxy(
 ): Promise<{ port: number; token: string; close: () => Promise<void> }> {
   const upstream = new URL(`${upstreamBaseUrl.replace(/\/+$/, "")}/chat/completions`);
   const token = randomBytes(32).toString("base64url");
-  const sockets = new Set<import("node:net").Socket>();
+  const sockets = new Set<Socket>();
   const upstreamRequests = new Set<AbortController>();
   const server = http.createServer(async (request, response) => {
     try {
@@ -48,7 +50,7 @@ export async function startOneRunApiProxy(
         return;
       }
 
-      Readable.fromWeb(upstreamResponse.body as import("node:stream/web").ReadableStream)
+      Readable.fromWeb(upstreamResponse.body as WebReadableStream)
         .on("error", (error) => response.destroy(error as Error))
         .pipe(response);
     } catch (error) {
@@ -88,7 +90,7 @@ export async function startOneRunApiProxy(
         socket.destroy();
       }
       await new Promise<void>((resolve, reject) => {
-        server.close((error) => error ? reject(error) : resolve());
+        server.close((error) => (error ? reject(error) : resolve()));
       });
     }
   };

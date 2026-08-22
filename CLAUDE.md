@@ -36,19 +36,19 @@ npm run dev:webhook  # tsx 直接运行 webhook 源码
 
 ## 架构地图
 
-| 目录 | 职责 |
-|------|------|
-| `src/actions/runReview.ts` | Actions 入口：分发 review/triage/chat/conflict 流程 |
-| `src/config.ts` | 全部环境变量的 zod schema |
-| `src/github/` | Octokit 客户端、checks、diff、命令反馈、bot 身份识别 |
-| `src/review/` | 审查流水线：prompt、策略（policy）、缓存、冲突解决器 |
-| `src/chat/` | 工具型 @bot 对话（容器隔离） |
-| `src/triage/` | Issue/PR 分类与重复检测 |
-| `src/repository/knowledge.ts` | R2 中的仓库知识缓存读写与校验 |
-| `src/storage/` | Cloudflare R2 缓存存储层 |
-| `src/ai/gooseCli.ts` | goose CLI 封装（chat 模式）；`apiProxy.ts` 为容器提供一次性凭据代理 |
-| `src/webhook/` | 可选 GitHub App webhook 服务与队列 |
-| `.github/workflows/` | `review.yml`（调用方包装）与 `review-reusable.yml`（可复用工作流） |
+| 目录                          | 职责                                                                |
+| ----------------------------- | ------------------------------------------------------------------- |
+| `src/actions/runReview.ts`    | Actions 入口：分发 review/triage/chat/conflict 流程                 |
+| `src/config.ts`               | 全部环境变量的 zod schema                                           |
+| `src/github/`                 | Octokit 客户端、checks、diff、命令反馈、bot 身份识别                |
+| `src/review/`                 | 审查流水线：prompt、策略（policy）、缓存、冲突解决器                |
+| `src/chat/`                   | 工具型 @bot 对话（容器隔离）                                        |
+| `src/triage/`                 | Issue/PR 分类与重复检测                                             |
+| `src/repository/knowledge.ts` | R2 中的仓库知识缓存读写与校验                                       |
+| `src/storage/`                | Cloudflare R2 缓存存储层                                            |
+| `src/ai/gooseCli.ts`          | goose CLI 封装（chat 模式）；`apiProxy.ts` 为容器提供一次性凭据代理 |
+| `src/webhook/`                | 可选 GitHub App webhook 服务与队列                                  |
+| `.github/workflows/`          | `review.yml`（调用方包装）与 `review-reusable.yml`（可复用工作流）  |
 
 ## 代码检索（graft）
 

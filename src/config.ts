@@ -58,21 +58,24 @@ const configSchema = z.object({
   webhookQueueConcurrency: z.coerce.number().int().positive().max(20).default(2),
   webhookQueueLimit: z.coerce.number().int().positive().max(10_000).default(500),
   gooseModel: optionalString.default("gpt-5.4"),
-  gooseThinkingEffort: z.preprocess((value) => {
-    if (value === "" || value === undefined) {
-      return undefined;
-    }
+  gooseThinkingEffort: z.preprocess(
+    (value) => {
+      if (value === "" || value === undefined) {
+        return undefined;
+      }
 
-    if (value === "minimal") {
-      return "low";
-    }
+      if (value === "minimal") {
+        return "low";
+      }
 
-    if (value === "xhigh") {
-      return "max";
-    }
+      if (value === "xhigh") {
+        return "max";
+      }
 
-    return value;
-  }, z.enum(["off", "low", "medium", "high", "max"]).optional()),
+      return value;
+    },
+    z.enum(["off", "low", "medium", "high", "max"]).optional()
+  ),
   gooseBaseUrl: optionalString,
   gooseApiKey: optionalString,
   reviewPolicy: z.enum(["allow", "require_approval", "reject"]).default("allow"),
@@ -87,8 +90,13 @@ const configSchema = z.object({
   r2AccessKeyId: optionalString,
   r2SecretAccessKey: optionalString,
   triageEnabled: envBoolean.default(true),
-  triageLabels: csvListWithDefault(["bug", "enhancement", "documentation", "question", "maintenance"])
-    .refine((labels) => labels.length > 0, "TRIAGE_LABELS must contain at least one label."),
+  triageLabels: csvListWithDefault([
+    "bug",
+    "enhancement",
+    "documentation",
+    "question",
+    "maintenance"
+  ]).refine((labels) => labels.length > 0, "TRIAGE_LABELS must contain at least one label."),
   triageDuplicateLabel: z.string().min(1).default("duplicate"),
   triageCandidateLimit: z.coerce.number().int().positive().max(100).default(50),
   triageInstructions: optionalString,
@@ -107,7 +115,8 @@ export const config = configSchema.parse({
   githubToken: process.env.GITHUB_TOKEN,
   githubAppId: process.env.GH_APP_ID ?? process.env.GITHUB_APP_ID,
   githubAppPrivateKey: process.env.GH_APP_PRIVATE_KEY ?? process.env.GITHUB_APP_PRIVATE_KEY,
-  githubAppInstallationId: process.env.GH_APP_INSTALLATION_ID ?? process.env.GITHUB_APP_INSTALLATION_ID,
+  githubAppInstallationId:
+    process.env.GH_APP_INSTALLATION_ID ?? process.env.GITHUB_APP_INSTALLATION_ID,
   webhookEnabled: process.env.WEBHOOK_ENABLED,
   webhookSecret: process.env.WEBHOOK_SECRET,
   webhookPath: process.env.WEBHOOK_PATH,
@@ -115,8 +124,7 @@ export const config = configSchema.parse({
   webhookQueueConcurrency: process.env.WEBHOOK_QUEUE_CONCURRENCY,
   webhookQueueLimit: process.env.WEBHOOK_QUEUE_LIMIT,
   gooseModel: process.env.GOOSE_MODEL ?? process.env.OPENCODE_MODEL,
-  gooseThinkingEffort:
-    process.env.GOOSE_THINKING_EFFORT ?? process.env.OPENCODE_REASONING_EFFORT,
+  gooseThinkingEffort: process.env.GOOSE_THINKING_EFFORT ?? process.env.OPENCODE_REASONING_EFFORT,
   gooseBaseUrl: process.env.GOOSE_BASE_URL ?? process.env.OPENCODE_BASE_URL,
   gooseApiKey: process.env.GOOSE_API_KEY ?? process.env.OPENCODE_API_KEY,
   reviewPolicy: process.env.REVIEW_POLICY,

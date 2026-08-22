@@ -8,11 +8,16 @@ import {
 } from "../src/review/processor.js";
 import type { ReviewDecision } from "../src/types.js";
 
-const marker = "<!-- ghbot-review:v1 mode=normal outcome=block requires-admin=false review=1 change=1 -->";
+const marker =
+  "<!-- ghbot-review:v1 mode=normal outcome=block requires-admin=false review=1 change=1 -->";
 
 const decisionWithBothFindingKinds: ReviewDecision = {
-  review: [{ path: "src/review.ts", line: 12, title: "Clarify this branch", body: "This is non-blocking." }],
-  change: [{ path: "src/review.ts", line: 8, title: "Fix the null case", body: "This blocks merge." }],
+  review: [
+    { path: "src/review.ts", line: 12, title: "Clarify this branch", body: "This is non-blocking." }
+  ],
+  change: [
+    { path: "src/review.ts", line: 8, title: "Fix the null case", body: "This blocks merge." }
+  ],
   comment: "The pull request needs one required fix and has one review note.",
   result: {
     canMerge: false,
@@ -28,7 +33,11 @@ test("review submission keeps change requests, review notes, and final comment s
   });
 
   assert.deepEqual(
-    phases.map(({ phase, event, findings }) => ({ phase, event, findings: findings.map((finding) => finding.category) })),
+    phases.map(({ phase, event, findings }) => ({
+      phase,
+      event,
+      findings: findings.map((finding) => finding.category)
+    })),
     [
       { phase: "change", event: "REQUEST_CHANGES", findings: ["change"] },
       { phase: "review", event: "COMMENT", findings: ["review"] },
@@ -56,12 +65,54 @@ test("old bot reviews are cleaned only while the current review is preserved", a
   const dismissedReviews: number[] = [];
   const minimizedReviews: Array<{ subjectId: string; classifier: string }> = [];
   const reviews = [
-    { id: 10, node_id: "PRR_10", user: { type: "Bot" }, body: marker, state: "CHANGES_REQUESTED", commit_id: "a".repeat(40) },
-    { id: 20, node_id: "PRR_20", user: { type: "Bot" }, body: marker, state: "APPROVED", commit_id: "b".repeat(40) },
-    { id: 30, node_id: "PRR_30", user: { type: "User" }, body: marker, state: "COMMENTED", commit_id: "c".repeat(40) },
-    { id: 40, node_id: "PRR_40", user: { type: "Bot" }, body: marker, state: "DISMISSED", commit_id: "d".repeat(40) },
-    { id: 50, node_id: "PRR_50", user: { type: "Bot" }, body: "Unrelated automation", state: "COMMENTED", commit_id: "e".repeat(40) },
-    { id: 60, node_id: "PRR_60", user: { type: "Bot" }, body: marker, state: "CHANGES_REQUESTED", commit_id: "b".repeat(40) }
+    {
+      id: 10,
+      node_id: "PRR_10",
+      user: { type: "Bot" },
+      body: marker,
+      state: "CHANGES_REQUESTED",
+      commit_id: "a".repeat(40)
+    },
+    {
+      id: 20,
+      node_id: "PRR_20",
+      user: { type: "Bot" },
+      body: marker,
+      state: "APPROVED",
+      commit_id: "b".repeat(40)
+    },
+    {
+      id: 30,
+      node_id: "PRR_30",
+      user: { type: "User" },
+      body: marker,
+      state: "COMMENTED",
+      commit_id: "c".repeat(40)
+    },
+    {
+      id: 40,
+      node_id: "PRR_40",
+      user: { type: "Bot" },
+      body: marker,
+      state: "DISMISSED",
+      commit_id: "d".repeat(40)
+    },
+    {
+      id: 50,
+      node_id: "PRR_50",
+      user: { type: "Bot" },
+      body: "Unrelated automation",
+      state: "COMMENTED",
+      commit_id: "e".repeat(40)
+    },
+    {
+      id: 60,
+      node_id: "PRR_60",
+      user: { type: "Bot" },
+      body: marker,
+      state: "CHANGES_REQUESTED",
+      commit_id: "b".repeat(40)
+    }
   ];
   const octokit = {
     paginate: async (method: unknown, params: { review_id?: number }) => {
@@ -114,7 +165,10 @@ test("old bot reviews are cleaned only while the current review is preserved", a
   });
 
   assert.deepEqual(deletedComments, [101, 102, 401, 601]);
-  assert.deepEqual(updatedReviews.map((item) => item.review_id), [10, 40, 60]);
+  assert.deepEqual(
+    updatedReviews.map((item) => item.review_id),
+    [10, 40, 60]
+  );
   assert.match(updatedReviews[0]!.body, /bbbbbbbbbbbb/);
   assert.deepEqual(dismissedReviews, [10, 60]);
   assert.deepEqual(minimizedReviews, [
@@ -130,8 +184,22 @@ test("superseded inline comments are marked resolved and hidden when GitHub expo
   const resolvedThreads: string[] = [];
   const hiddenComments: string[] = [];
   const reviews = [
-    { id: 10, node_id: "PRR_10", user: { type: "Bot" }, body: marker, state: "CHANGES_REQUESTED", commit_id: "a".repeat(40) },
-    { id: 20, node_id: "PRR_20", user: { type: "Bot" }, body: marker, state: "COMMENTED", commit_id: "b".repeat(40) }
+    {
+      id: 10,
+      node_id: "PRR_10",
+      user: { type: "Bot" },
+      body: marker,
+      state: "CHANGES_REQUESTED",
+      commit_id: "a".repeat(40)
+    },
+    {
+      id: 20,
+      node_id: "PRR_20",
+      user: { type: "Bot" },
+      body: marker,
+      state: "COMMENTED",
+      commit_id: "b".repeat(40)
+    }
   ];
   const octokit = {
     paginate: async (method: unknown, params: { review_id?: number }) => {
@@ -139,7 +207,10 @@ test("superseded inline comments are marked resolved and hidden when GitHub expo
         return reviews;
       }
       if (params.review_id === 10) {
-        return [{ id: 101, node_id: "PRC_101" }, { id: 102, node_id: "PRC_102" }];
+        return [
+          { id: 101, node_id: "PRC_101" },
+          { id: 102, node_id: "PRC_102" }
+        ];
       }
       return [];
     },

@@ -74,7 +74,10 @@ export async function loadPreviousReview(params: {
       return undefined;
     }
 
-    logger.warn({ error, pullNumber: params.pullNumber }, "Ignoring invalid previous review cache.");
+    logger.warn(
+      { error, pullNumber: params.pullNumber },
+      "Ignoring invalid previous review cache."
+    );
     return undefined;
   }
 }

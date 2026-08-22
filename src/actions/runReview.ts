@@ -103,15 +103,23 @@ async function main(): Promise<void> {
     prefix: config.r2Prefix
   };
   let persistentCacheRestored = false;
-  await restorePersistentCache(persistentCache).then(() => {
-    persistentCacheRestored = true;
-  }).catch((error: unknown) => {
-    logger.warn({ error, eventName }, "Persistent R2 cache restore failed; continuing without it.");
-  });
+  await restorePersistentCache(persistentCache)
+    .then(() => {
+      persistentCacheRestored = true;
+    })
+    .catch((error: unknown) => {
+      logger.warn(
+        { error, eventName },
+        "Persistent R2 cache restore failed; continuing without it."
+      );
+    });
   let repositoryKnowledgeBefore: string | undefined;
   if (config.repositoryKnowledgeEnabled) {
     repositoryKnowledgeBefore = await loadRepositoryKnowledge().catch((error: unknown) => {
-      logger.warn({ error, eventName }, "Repository knowledge initialization failed; continuing without it.");
+      logger.warn(
+        { error, eventName },
+        "Repository knowledge initialization failed; continuing without it."
+      );
       return undefined;
     });
   }
@@ -126,173 +134,197 @@ async function main(): Promise<void> {
 
   let eventFailed = false;
   try {
-  if (eventName === "pull_request_target") {
-    const prPayload = payload as PullRequestPayload;
-    const ref = {
-      owner: prPayload.repository.owner.login,
-      repo: prPayload.repository.name,
-      pullNumber: prPayload.pull_request.number
-    };
+    if (eventName === "pull_request_target") {
+      const prPayload = payload as PullRequestPayload;
+      const ref = {
+        owner: prPayload.repository.owner.login,
+        repo: prPayload.repository.name,
+        pullNumber: prPayload.pull_request.number
+      };
 
-    if (["opened", "edited", "reopened"].includes(prPayload.action)) {
-      try {
-        await processPullRequestTriage(octokit, {
-          owner: ref.owner,
-          repo: ref.repo,
-          pullNumber: ref.pullNumber
-        });
-      } catch (error) {
-        logger.warn(
-          { error, ...ref },
-          "Pull request triage failed; continuing with code review."
-        );
+      if (["opened", "edited", "reopened"].includes(prPayload.action)) {
+        try {
+          await processPullRequestTriage(octokit, {
+            owner: ref.owner,
+            repo: ref.repo,
+            pullNumber: ref.pullNumber
+          });
+        } catch (error) {
+          logger.warn(
+            { error, ...ref },
+            "Pull request triage failed; continuing with code review."
+          );
+        }
       }
-    }
 
-    if (!(await shouldReviewPullRequest(octokit, ref))) {
-      await deleteLocalReviewCache(ref.pullNumber);
-      logger.info({ ...ref }, "Skipping pull request event outside REVIEW_BRANCHES.");
-      return;
-    }
+      if (!(await shouldReviewPullRequest(octokit, ref))) {
+        await deleteLocalReviewCache(ref.pullNumber);
+        logger.info({ ...ref }, "Skipping pull request event outside REVIEW_BRANCHES.");
+        return;
+      }
 
-    if (prPayload.action === "opened") {
-      await withRetry("github.issues.createComment.started", async () => {
-        return octokit.rest.issues.createComment({
-          owner: prPayload.repository.owner.login,
-          repo: prPayload.repository.name,
-          issue_number: prPayload.pull_request.number,
-          body: "Automated review has started. I am checking this pull request now."
+      if (prPayload.action === "opened") {
+        await withRetry("github.issues.createComment.started", async () => {
+          return octokit.rest.issues.createComment({
+            owner: prPayload.repository.owner.login,
+            repo: prPayload.repository.name,
+            issue_number: prPayload.pull_request.number,
+            body: "Automated review has started. I am checking this pull request now."
+          });
         });
-      });
-    }
+      }
 
-    const progress = prPayload.action === "synchronize"
-      ? await beginCommitReviewProgress(octokit, ref).catch((progressError: unknown) => {
-          logger.warn({ error: progressError, ...ref }, "Failed to publish review start progress; continuing review.");
-          return undefined;
-        })
-      : undefined;
-    try {
-      await processPullRequest(
-        octokit,
-        ref,
-        config.reviewStrictness === "strict" ? "strict" : "normal",
-        github.token
-      );
-    } catch (error) {
+      const progress =
+        prPayload.action === "synchronize"
+          ? await beginCommitReviewProgress(octokit, ref).catch((progressError: unknown) => {
+              logger.warn(
+                { error: progressError, ...ref },
+                "Failed to publish review start progress; continuing review."
+              );
+              return undefined;
+            })
+          : undefined;
+      try {
+        await processPullRequest(
+          octokit,
+          ref,
+          config.reviewStrictness === "strict" ? "strict" : "normal",
+          github.token
+        );
+      } catch (error) {
+        if (progress) {
+          await finishCommitReviewProgress(octokit, { ...ref, ...progress, failed: true }).catch(
+            (progressError: unknown) => {
+              logger.warn(
+                { error: progressError, ...ref },
+                "Failed to publish review failure progress."
+              );
+            }
+          );
+        }
+        throw error;
+      }
       if (progress) {
-        await finishCommitReviewProgress(octokit, { ...ref, ...progress, failed: true }).catch(
+        await finishCommitReviewProgress(octokit, { ...ref, ...progress }).catch(
           (progressError: unknown) => {
-            logger.warn({ error: progressError, ...ref }, "Failed to publish review failure progress.");
+            logger.warn(
+              { error: progressError, ...ref },
+              "Failed to publish review completion progress."
+            );
           }
         );
       }
-      throw error;
+      return;
     }
-    if (progress) {
-      await finishCommitReviewProgress(octokit, { ...ref, ...progress }).catch(
-        (progressError: unknown) => {
-          logger.warn({ error: progressError, ...ref }, "Failed to publish review completion progress.");
-        }
-      );
-    }
-    return;
-  }
 
-  if (eventName === "issues") {
-    const issuePayload = payload as IssuePayload;
-    if (["opened", "edited", "reopened"].includes(issuePayload.action)) {
-      await processIssueTriage(octokit, {
-        owner: issuePayload.repository.owner.login,
-        repo: issuePayload.repository.name,
-        issueNumber: issuePayload.issue.number
+    if (eventName === "issues") {
+      const issuePayload = payload as IssuePayload;
+      if (["opened", "edited", "reopened"].includes(issuePayload.action)) {
+        await processIssueTriage(octokit, {
+          owner: issuePayload.repository.owner.login,
+          repo: issuePayload.repository.name,
+          issueNumber: issuePayload.issue.number
+        });
+      }
+      return;
+    }
+
+    if (eventName === "issue_comment") {
+      const commentPayload = payload as IssueCommentPayload;
+      if (!commentPayload.issue.pull_request) {
+        logger.info(
+          { issueNumber: commentPayload.issue.number },
+          "Skipping issue comment because it is not on a pull request."
+        );
+        return;
+      }
+
+      await processRecheckComment(octokit, {
+        owner: commentPayload.repository.owner.login,
+        repo: commentPayload.repository.name,
+        pullNumber: commentPayload.issue.number,
+        commentId: commentPayload.comment.id,
+        commenterLogin: commentPayload.comment.user.login,
+        commentBody: commentPayload.comment.body,
+        gitToken: github.token
       });
-    }
-    return;
-  }
-
-  if (eventName === "issue_comment") {
-    const commentPayload = payload as IssueCommentPayload;
-    if (!commentPayload.issue.pull_request) {
-      logger.info({ issueNumber: commentPayload.issue.number }, "Skipping issue comment because it is not on a pull request.");
+      await processConflictComment(octokit, {
+        owner: commentPayload.repository.owner.login,
+        repo: commentPayload.repository.name,
+        pullNumber: commentPayload.issue.number,
+        commentId: commentPayload.comment.id,
+        commenterLogin: commentPayload.comment.user.login,
+        commentBody: commentPayload.comment.body,
+        gitToken: github.token
+      });
+      await processPullRequestChat(octokit, {
+        owner: commentPayload.repository.owner.login,
+        repo: commentPayload.repository.name,
+        pullNumber: commentPayload.issue.number,
+        commentId: commentPayload.comment.id,
+        commenterLogin: commentPayload.comment.user.login,
+        commentBody: commentPayload.comment.body
+      });
       return;
     }
 
-    await processRecheckComment(octokit, {
-      owner: commentPayload.repository.owner.login,
-      repo: commentPayload.repository.name,
-      pullNumber: commentPayload.issue.number,
-      commentId: commentPayload.comment.id,
-      commenterLogin: commentPayload.comment.user.login,
-      commentBody: commentPayload.comment.body,
-      gitToken: github.token
-    });
-    await processConflictComment(octokit, {
-      owner: commentPayload.repository.owner.login,
-      repo: commentPayload.repository.name,
-      pullNumber: commentPayload.issue.number,
-      commentId: commentPayload.comment.id,
-      commenterLogin: commentPayload.comment.user.login,
-      commentBody: commentPayload.comment.body,
-      gitToken: github.token
-    });
-    await processPullRequestChat(octokit, {
-      owner: commentPayload.repository.owner.login,
-      repo: commentPayload.repository.name,
-      pullNumber: commentPayload.issue.number,
-      commentId: commentPayload.comment.id,
-      commenterLogin: commentPayload.comment.user.login,
-      commentBody: commentPayload.comment.body
-    });
-    return;
-  }
+    if (eventName === "pull_request_review") {
+      const reviewPayload = payload as PullRequestReviewPayload;
+      const reviewerLogin = reviewPayload.review.user?.login;
+      if (!reviewerLogin) {
+        logger.warn(
+          { pullNumber: reviewPayload.pull_request.number },
+          "Skipping review event without reviewer login."
+        );
+        return;
+      }
 
-  if (eventName === "pull_request_review") {
-    const reviewPayload = payload as PullRequestReviewPayload;
-    const reviewerLogin = reviewPayload.review.user?.login;
-    if (!reviewerLogin) {
-      logger.warn({ pullNumber: reviewPayload.pull_request.number }, "Skipping review event without reviewer login.");
+      await processPullRequestReviewApproval(octokit, {
+        owner: reviewPayload.repository.owner.login,
+        repo: reviewPayload.repository.name,
+        pullNumber: reviewPayload.pull_request.number,
+        reviewerLogin,
+        state: reviewPayload.review.state,
+        commitId: reviewPayload.review.commit_id
+      });
       return;
     }
 
-    await processPullRequestReviewApproval(octokit, {
-      owner: reviewPayload.repository.owner.login,
-      repo: reviewPayload.repository.name,
-      pullNumber: reviewPayload.pull_request.number,
-      reviewerLogin,
-      state: reviewPayload.review.state,
-      commitId: reviewPayload.review.commit_id
-    });
-    return;
-  }
+    if (eventName === "schedule") {
+      const scheduledPayload = payload as ScheduledPayload;
+      await processScheduledPendingMerges(octokit, {
+        owner: scheduledPayload.repository.owner.login,
+        repo: scheduledPayload.repository.name
+      });
+      return;
+    }
 
-  if (eventName === "schedule") {
-    const scheduledPayload = payload as ScheduledPayload;
-    await processScheduledPendingMerges(octokit, {
-      owner: scheduledPayload.repository.owner.login,
-      repo: scheduledPayload.repository.name
-    });
-    return;
-  }
-
-  logger.warn({ eventName }, "Unhandled GitHub Actions event.");
+    logger.warn({ eventName }, "Unhandled GitHub Actions event.");
   } catch (error) {
     eventFailed = true;
     throw error;
   } finally {
     if (!eventFailed) {
-      const repositoryKnowledgeAfter = persistentCacheRestored && repositoryKnowledgeBefore !== undefined
-        ? await loadRepositoryKnowledge().catch((error: unknown) => {
-            logger.warn({ error, eventName }, "Repository knowledge comparison failed; skipping its R2 update.");
-            return undefined;
-          })
-        : undefined;
+      const repositoryKnowledgeAfter =
+        persistentCacheRestored && repositoryKnowledgeBefore !== undefined
+          ? await loadRepositoryKnowledge().catch((error: unknown) => {
+              logger.warn(
+                { error, eventName },
+                "Repository knowledge comparison failed; skipping its R2 update."
+              );
+              return undefined;
+            })
+          : undefined;
       await savePersistentCache({
         ...persistentCache,
         saveRepositoryKnowledge:
-          repositoryKnowledgeAfter !== undefined && repositoryKnowledgeAfter !== repositoryKnowledgeBefore
+          repositoryKnowledgeAfter !== undefined &&
+          repositoryKnowledgeAfter !== repositoryKnowledgeBefore
       }).catch((error: unknown) => {
-        logger.warn({ error, eventName }, "Persistent R2 cache save failed; review results remain valid for this run.");
+        logger.warn(
+          { error, eventName },
+          "Persistent R2 cache save failed; review results remain valid for this run."
+        );
       });
     }
   }
@@ -300,7 +332,12 @@ async function main(): Promise<void> {
 
 function getPullNumberForCache(
   eventName: string,
-  payload: PullRequestPayload | IssuePayload | IssueCommentPayload | PullRequestReviewPayload | ScheduledPayload
+  payload:
+    | PullRequestPayload
+    | IssuePayload
+    | IssueCommentPayload
+    | PullRequestReviewPayload
+    | ScheduledPayload
 ): number | undefined {
   if (eventName === "pull_request_target") {
     return (payload as PullRequestPayload).pull_request.number;
@@ -315,16 +352,33 @@ function getPullNumberForCache(
   return undefined;
 }
 
-function readPayloadFromGitHubEventPath(): PullRequestPayload | IssuePayload | IssueCommentPayload | PullRequestReviewPayload | ScheduledPayload {
+function readPayloadFromGitHubEventPath():
+  | PullRequestPayload
+  | IssuePayload
+  | IssueCommentPayload
+  | PullRequestReviewPayload
+  | ScheduledPayload {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
     throw new Error("GITHUB_EVENT_PATH is required when workflow_call inputs are not provided.");
   }
 
-  return JSON.parse(fs.readFileSync(eventPath, "utf8")) as PullRequestPayload | IssuePayload | IssueCommentPayload | PullRequestReviewPayload | ScheduledPayload;
+  return JSON.parse(fs.readFileSync(eventPath, "utf8")) as
+    | PullRequestPayload
+    | IssuePayload
+    | IssueCommentPayload
+    | PullRequestReviewPayload
+    | ScheduledPayload;
 }
 
-function buildPayloadFromWorkflowCallEnv(eventName: string): PullRequestPayload | IssuePayload | IssueCommentPayload | PullRequestReviewPayload | ScheduledPayload {
+function buildPayloadFromWorkflowCallEnv(
+  eventName: string
+):
+  | PullRequestPayload
+  | IssuePayload
+  | IssueCommentPayload
+  | PullRequestReviewPayload
+  | ScheduledPayload {
   const action = process.env.GHBOT_EVENT_ACTION;
   const owner = process.env.GHBOT_REPOSITORY_OWNER;
   const repo = process.env.GHBOT_REPOSITORY_NAME;

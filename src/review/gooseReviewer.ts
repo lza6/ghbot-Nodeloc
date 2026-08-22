@@ -122,8 +122,9 @@ function buildSystemPrompt(mode: ReviewMode): string {
     "Do not invent files, line numbers, test results, or runtime behavior."
   ];
 
-  const modeRule = mode === "normal"
-    ? "This is a normal review. Do not nitpick or pursue minor details. Only report clear runtime-impacting defects, broken builds or tests, data loss, concrete security problems, or important user-facing regressions. Put minor observations in comment rather than review, and do not create findings for style preferences or small polish issues."
-    : "This is a strict review explicitly requested by the repository administrators. Review thoroughly for concrete correctness bugs, security issues, data-loss risks, broken tests, bad error handling, compatibility regressions, and repository-specific requirements.";
+  const modeRule =
+    mode === "normal"
+      ? "This is a normal review. Do not nitpick or pursue minor details. Only report clear runtime-impacting defects, broken builds or tests, data loss, concrete security problems, or important user-facing regressions. Put minor observations in comment rather than review, and do not create findings for style preferences or small polish issues."
+      : "This is a strict review explicitly requested by the repository administrators. Review thoroughly for concrete correctness bugs, security issues, data-loss risks, broken tests, bad error handling, compatibility regressions, and repository-specific requirements.";
   return [...commonRules, modeRule].join(" ");
 }

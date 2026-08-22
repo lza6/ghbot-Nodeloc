@@ -42,8 +42,7 @@ export function evaluateReviewDecision(
     };
   }
 
-  const requiresAdminApproval =
-    reviewPolicy === "require_approval" && decision.review.length > 0;
+  const requiresAdminApproval = reviewPolicy === "require_approval" && decision.review.length > 0;
 
   return {
     event: requiresAdminApproval ? "COMMENT" : "APPROVE",
@@ -106,7 +105,10 @@ export function parseReviewExternalId(value: string | null | undefined): BotRevi
     return null;
   }
 
-  const match = /^ghbot-review:v1:mode=(strict|normal|lenient):outcome=(pass|block):requires-admin=(true|false)$/.exec(value);
+  const match =
+    /^ghbot-review:v1:mode=(strict|normal|lenient):outcome=(pass|block):requires-admin=(true|false)$/.exec(
+      value
+    );
   if (!match) {
     return null;
   }
@@ -123,7 +125,10 @@ export function parseReviewStateMarker(body: string | null | undefined): BotRevi
     return null;
   }
 
-  const match = /<!-- ghbot-review:v1 mode=(strict|normal|lenient) outcome=(pass|block) requires-admin=(true|false) review=\d+ change=\d+ -->/.exec(body);
+  const match =
+    /<!-- ghbot-review:v1 mode=(strict|normal|lenient) outcome=(pass|block) requires-admin=(true|false) review=\d+ change=\d+ -->/.exec(
+      body
+    );
   if (!match) {
     return null;
   }

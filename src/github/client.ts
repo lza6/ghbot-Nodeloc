@@ -23,7 +23,9 @@ export async function createGitHubCredentials(params?: {
         (params ? await resolveInstallationId(auth, params.owner, params.repo) : undefined);
 
       if (!installationId) {
-        throw new Error("GitHub App installation id is not configured and could not be resolved from the repository.");
+        throw new Error(
+          "GitHub App installation id is not configured and could not be resolved from the repository."
+        );
       }
 
       const installationAuthentication = await auth({

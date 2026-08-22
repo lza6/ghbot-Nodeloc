@@ -24,7 +24,11 @@ export function repositoryKnowledgeObjectKey(repositoryId: string, prefix?: stri
   return `${repositoryObjectPrefix(repositoryId, prefix)}/knowledge/repository.md`;
 }
 
-export function pullRequestReviewObjectKey(repositoryId: string, pullNumber: number, prefix?: string): string {
+export function pullRequestReviewObjectKey(
+  repositoryId: string,
+  pullNumber: number,
+  prefix?: string
+): string {
   if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
     throw new Error("Pull request number must be a positive integer.");
   }
@@ -110,7 +114,9 @@ export async function savePersistentCache(params: {
       contentType: "application/json; charset=utf-8",
       validate: (content) => validateReviewBuffer(content, params),
       storage,
-      afterRead: (content) => { reviewContent = content; }
+      afterRead: (content) => {
+        reviewContent = content;
+      }
     });
     if (reviewContent) {
       const cached = parseReviewCacheContent(reviewContent.toString("utf8"));
@@ -130,7 +136,9 @@ export async function savePersistentCache(params: {
 
 function repositoryObjectPrefix(repositoryId: string, prefix?: string): string {
   if (!/^\d+$/.test(repositoryId)) {
-    throw new Error("Repository id must contain only digits before it can be used in an R2 object key.");
+    throw new Error(
+      "Repository id must contain only digits before it can be used in an R2 object key."
+    );
   }
   const normalizedPrefix = normalizeObjectPrefix(prefix);
   return `${normalizedPrefix ? `${normalizedPrefix}/` : ""}repositories/${repositoryId}`;
@@ -141,7 +149,9 @@ export function normalizeObjectPrefix(value: string | undefined): string {
   if (!normalized) {
     return "";
   }
-  if (!normalized.split("/").every((segment) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(segment))) {
+  if (
+    !normalized.split("/").every((segment) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(segment))
+  ) {
     throw new Error("R2_PREFIX must contain only safe slash-separated object-key segments.");
   }
   return normalized;
@@ -165,7 +175,10 @@ async function restoreObject(params: {
   params.validate(content);
   await fs.mkdir(path.dirname(params.target), { recursive: true });
   await fs.writeFile(params.target, content, { mode: 0o600 });
-  logger.info({ key: params.key, bytes: content.byteLength }, "Restored persistent cache object from R2.");
+  logger.info(
+    { key: params.key, bytes: content.byteLength },
+    "Restored persistent cache object from R2."
+  );
 }
 
 async function saveObjectIfPresent(params: {
@@ -188,7 +201,10 @@ async function saveObjectIfPresent(params: {
   params.validate(content);
   params.afterRead?.(content);
   await params.storage.upload({ key: params.key, body: content, contentType: params.contentType });
-  logger.info({ key: params.key, bytes: content.byteLength }, "Saved persistent cache object to R2.");
+  logger.info(
+    { key: params.key, bytes: content.byteLength },
+    "Saved persistent cache object to R2."
+  );
 }
 
 function validateReviewBuffer(
@@ -203,7 +219,9 @@ function validateReviewBuffer(
     cached.repository !== `${expected.owner}/${expected.repo}` ||
     cached.pullNumber !== expected.pullNumber
   ) {
-    throw new Error("Review cache identity does not match the current repository and pull request.");
+    throw new Error(
+      "Review cache identity does not match the current repository and pull request."
+    );
   }
 }
 

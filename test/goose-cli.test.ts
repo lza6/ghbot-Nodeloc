@@ -18,7 +18,9 @@ test("goose agent mounts the workflow binary read-only and keeps a visible insta
     prompt: "introduce this pull request"
   });
 
-  assert.ok(args.includes("type=bind,source=/tmp/goose/bin/goose,target=/usr/local/bin/goose,readonly"));
+  assert.ok(
+    args.includes("type=bind,source=/tmp/goose/bin/goose,target=/usr/local/bin/goose,readonly")
+  );
   const bootstrap = args[args.indexOf("-lc") + 1];
   assert.match(bootstrap!, /command -v goose/);
   assert.match(bootstrap!, /cat \/tmp\/goose-install\.log >&2/);
@@ -45,15 +47,19 @@ test("isolated validation receives the repository but no model or GitHub credent
   assert.match(bootstrap!, /exec sh -lc "\$1"/);
   assert.equal(args.at(-2), "ghbot-validation");
   assert.equal(args.at(-1), "npm ci && npm test");
-  assert.equal(args.some((arg) => /OPENAI|GITHUB|GHBOT_GIT_TOKEN/.test(arg)), false);
+  assert.equal(
+    args.some((arg) => /OPENAI|GITHUB|GHBOT_GIT_TOKEN/.test(arg)),
+    false
+  );
 });
 
 test("process logging redacts only prompts and trusted validation commands", () => {
   assert.deepEqual(redactProcessArgs(["run", "--rm"], "workspace cleanup"), ["run", "--rm"]);
-  assert.deepEqual(
-    redactProcessArgs(["run", "--text", "secret prompt"], "goose agent container"),
-    ["run", "--text", "[goose prompt: 13 chars]"]
-  );
+  assert.deepEqual(redactProcessArgs(["run", "--text", "secret prompt"], "goose agent container"), [
+    "run",
+    "--text",
+    "[goose prompt: 13 chars]"
+  ]);
   assert.deepEqual(
     redactProcessArgs(["run", "sh", "-lc", "npm ci && npm test"], "isolated repository validation"),
     ["run", "sh", "-lc", "[validation command: 18 chars]"]
@@ -68,7 +74,10 @@ test("goose agent can fall back to installing inside the container", () => {
     prompt: "inspect this pull request"
   });
 
-  assert.equal(args.some((arg) => arg.includes("target=/usr/local/bin/goose")), false);
+  assert.equal(
+    args.some((arg) => arg.includes("target=/usr/local/bin/goose")),
+    false
+  );
   assert.match(args[args.indexOf("-lc") + 1]!, /GOOSE_VERSION="v1\.46\.0"/);
 });
 
@@ -119,7 +128,7 @@ test("goose output strips a surrounding JSON markdown fence", () => {
     messages: [
       {
         role: "assistant",
-        content: [{ type: "text", text: "```json\n{\"ok\":true}\n```" }]
+        content: [{ type: "text", text: '```json\n{"ok":true}\n```' }]
       }
     ]
   });

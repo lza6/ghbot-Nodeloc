@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import http from "node:http";
+import type http from "node:http";
 import { Readable } from "node:stream";
 import test from "node:test";
 import {
@@ -9,10 +9,7 @@ import {
   parseWebhookMentionEvent,
   webhookPermissionAllows
 } from "../src/webhook/processor.js";
-import {
-  createWebhookServer,
-  verifyGitHubWebhookSignature
-} from "../src/webhook/server.js";
+import { createWebhookServer, verifyGitHubWebhookSignature } from "../src/webhook/server.js";
 
 const secret = "webhook-test-secret";
 
@@ -43,6 +40,31 @@ function signature(body: string): string {
   return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
 }
 
+type OctokitLike = Parameters<typeof getCommenterPermission>[0];
+
+function createOctokitStub(calls: string[]): OctokitLike {
+  return {
+    rest: {
+      repos: {
+        get: async () => {
+          calls.push("repo");
+          return { data: { owner: { type: "Organization" } } };
+        },
+        getCollaboratorPermissionLevel: async () => {
+          calls.push("collaborator");
+          return { data: { permission: null } };
+        }
+      },
+      orgs: {
+        checkMembershipForUser: async () => {
+          calls.push("membership");
+          return { status: 204 };
+        }
+      }
+    }
+  } as unknown as OctokitLike;
+}
+
 class TestResponse {
   statusCode = 200;
   headers: Record<string, string> = {};
@@ -69,7 +91,13 @@ class TestResponse {
 
 async function request(
   server: http.Server,
-  options: { method?: string; path?: string; body?: string; delivery?: string; signature?: string } = {}
+  options: {
+    method?: string;
+    path?: string;
+    body?: string;
+    delivery?: string;
+    signature?: string;
+  } = {}
 ): Promise<{ status: number; body: string }> {
   const body = options.body ?? JSON.stringify(issueCommentPayload());
   const request = Object.assign(Readable.from([Buffer.from(body)]), {
@@ -106,35 +134,39 @@ test("Webhook event parsing only accepts supported mentions and preserves PR con
     "delivery-1",
     "github-actions[bot]"
   );
-  assert.deepEqual(mention && {
-    eventName: mention.eventName,
-    installationId: mention.installationId,
-    owner: mention.owner,
-    repo: mention.repo,
-    issueNumber: mention.issueNumber,
-    targetKind: mention.targetKind,
-    replyMode: mention.replyMode
-  }, {
-    eventName: "issue_comment",
-    installationId: 12345,
-    owner: "acme",
-    repo: "demo",
-    issueNumber: 7,
-    targetKind: "pull_request",
-    replyMode: "conversation"
-  });
-  assert.equal(parseWebhookMentionEvent(
-    "issue_comment",
-    issueCommentPayload("ordinary comment"),
-    "delivery-2",
-    "github-actions[bot]"
-  ), null);
-  assert.equal(parseWebhookMentionEvent(
-    "issues",
-    issueCommentPayload(),
-    "delivery-3",
-    "github-actions[bot]"
-  ), null);
+  assert.deepEqual(
+    mention && {
+      eventName: mention.eventName,
+      installationId: mention.installationId,
+      owner: mention.owner,
+      repo: mention.repo,
+      issueNumber: mention.issueNumber,
+      targetKind: mention.targetKind,
+      replyMode: mention.replyMode
+    },
+    {
+      eventName: "issue_comment",
+      installationId: 12345,
+      owner: "acme",
+      repo: "demo",
+      issueNumber: 7,
+      targetKind: "pull_request",
+      replyMode: "conversation"
+    }
+  );
+  assert.equal(
+    parseWebhookMentionEvent(
+      "issue_comment",
+      issueCommentPayload("ordinary comment"),
+      "delivery-2",
+      "github-actions[bot]"
+    ),
+    null
+  );
+  assert.equal(
+    parseWebhookMentionEvent("issues", issueCommentPayload(), "delivery-3", "github-actions[bot]"),
+    null
+  );
 });
 
 test("Webhook permission policy is explicit", () => {
@@ -150,27 +182,7 @@ test("Webhook permission policy is explicit", () => {
 
 test("organization members can use webhook chat without repository collaborator access", async () => {
   const calls: string[] = [];
-  const octokit = {
-    rest: {
-      repos: {
-        get: async () => {
-          calls.push("repo");
-          return { data: { owner: { type: "Organization" } } };
-        },
-        getCollaboratorPermissionLevel: async () => {
-          calls.push("collaborator");
-          return { data: { permission: null } };
-        }
-      },
-      orgs: {
-        checkMembershipForUser: async () => {
-          calls.push("membership");
-          return { status: 204 };
-        }
-      }
-    }
-  } as any;
-
+  const octokit = createOctokitStub(calls);
   const permission = await getCommenterPermission(octokit, {
     eventName: "issue_comment",
     action: "created",
@@ -193,7 +205,9 @@ test("organization members can use webhook chat without repository collaborator 
 test("Webhook server returns health, verifies signatures, queues asynchronously, and deduplicates deliveries", async () => {
   const handled: string[] = [];
   let resolveHandler: (() => void) | undefined;
-  const handlerFinished = new Promise<void>((resolve) => { resolveHandler = resolve; });
+  const handlerFinished = new Promise<void>((resolve) => {
+    resolveHandler = resolve;
+  });
   const server = createWebhookServer({
     secret,
     handleDelivery: async (_eventName, _payload, deliveryId) => {

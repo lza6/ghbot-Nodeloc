@@ -4,10 +4,7 @@ import { pathToFileURL } from "node:url";
 import { config } from "../config.js";
 import { createGitHubAppInstallationCredentials } from "../github/client.js";
 import { logger } from "../logger.js";
-import {
-  parseWebhookMentionEvent,
-  processWebhookMention
-} from "./processor.js";
+import { parseWebhookMentionEvent, processWebhookMention } from "./processor.js";
 
 const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
 const DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -54,7 +51,8 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
     options.queueConcurrency ?? config.webhookQueueConcurrency,
     options.queueLimit ?? config.webhookQueueLimit
   );
-  const handleDelivery = options.handleDelivery ?? createDefaultDeliveryHandler(options.botName ?? config.botName);
+  const handleDelivery =
+    options.handleDelivery ?? createDefaultDeliveryHandler(options.botName ?? config.botName);
 
   return http.createServer(async (request, response) => {
     const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -80,7 +78,10 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
     try {
       body = await readRawBody(request, maxBodyBytes);
     } catch (error) {
-      logger.warn({ error, deliveryId, eventName }, "Rejected oversized or unreadable GitHub webhook body.");
+      logger.warn(
+        { error, deliveryId, eventName },
+        "Rejected oversized or unreadable GitHub webhook body."
+      );
       writeJson(response, 413, { error: "Webhook payload is too large." });
       return;
     }
@@ -98,13 +99,18 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
     }
 
     try {
-      const accepted = queue.enqueue(deliveryId, () => handleDelivery(eventName, payload, deliveryId));
+      const accepted = queue.enqueue(deliveryId, () =>
+        handleDelivery(eventName, payload, deliveryId)
+      );
       if (!accepted) {
         writeJson(response, 202, { ok: true, duplicate: true });
         return;
       }
     } catch (error) {
-      logger.warn({ error, deliveryId, eventName }, "Webhook queue is full; asking GitHub to retry.");
+      logger.warn(
+        { error, deliveryId, eventName },
+        "Webhook queue is full; asking GitHub to retry."
+      );
       writeJson(response, 503, { error: "Webhook queue is temporarily full." });
       return;
     }
@@ -115,7 +121,9 @@ export function createWebhookServer(options: WebhookServerOptions): http.Server 
 
 export async function startWebhookServer(): Promise<http.Server> {
   if (!config.webhookEnabled) {
-    throw new Error("Webhook support is disabled. Set WEBHOOK_ENABLED=true to start the webhook service.");
+    throw new Error(
+      "Webhook support is disabled. Set WEBHOOK_ENABLED=true to start the webhook service."
+    );
   }
   if (!config.webhookSecret) {
     throw new Error("WEBHOOK_SECRET is required when WEBHOOK_ENABLED=true.");
@@ -137,7 +145,10 @@ export async function startWebhookServer(): Promise<http.Server> {
       resolve();
     });
   });
-  logger.info({ port: config.port, path: config.webhookPath }, "GitHub webhook server is listening.");
+  logger.info(
+    { port: config.port, path: config.webhookPath },
+    "GitHub webhook server is listening."
+  );
   return server;
 }
 
@@ -145,7 +156,10 @@ function createDefaultDeliveryHandler(botName: string): WebhookDeliveryHandler {
   return async (eventName, payload, deliveryId) => {
     const mention = parseWebhookMentionEvent(eventName, payload, deliveryId, botName);
     if (!mention) {
-      logger.debug({ eventName, deliveryId }, "Ignoring GitHub webhook without a supported bot mention.");
+      logger.debug(
+        { eventName, deliveryId },
+        "Ignoring GitHub webhook without a supported bot mention."
+      );
       return;
     }
     const { octokit } = await createGitHubAppInstallationCredentials(mention.installationId);
@@ -181,7 +195,8 @@ class WebhookTaskQueue {
     while (this.active < this.concurrency && this.pending.length > 0) {
       const task = this.pending.shift()!;
       this.active += 1;
-      void task.run()
+      void task
+        .run()
         .catch((error) => {
           // Keep completed deliveries deduplicated, but allow GitHub to retry
           // a delivery whose background handler failed.

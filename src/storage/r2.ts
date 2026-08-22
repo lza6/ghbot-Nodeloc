@@ -18,11 +18,15 @@ export function isR2Configured(): boolean {
 export async function downloadR2Object(key: string): Promise<Buffer | undefined> {
   const settings = requireR2Settings();
   try {
-    const response = await getR2Client(settings).send(new GetObjectCommand({
-      Bucket: settings.bucket,
-      Key: key
-    }));
-    return response.Body ? Buffer.from(await response.Body.transformToByteArray()) : Buffer.alloc(0);
+    const response = await getR2Client(settings).send(
+      new GetObjectCommand({
+        Bucket: settings.bucket,
+        Key: key
+      })
+    );
+    return response.Body
+      ? Buffer.from(await response.Body.transformToByteArray())
+      : Buffer.alloc(0);
   } catch (error) {
     if (isMissingObject(error)) {
       return undefined;
@@ -37,16 +41,18 @@ export async function uploadR2Object(params: {
   contentType: string;
 }): Promise<void> {
   const settings = requireR2Settings();
-  await getR2Client(settings).send(new PutObjectCommand({
-    Bucket: settings.bucket,
-    Key: params.key,
-    Body: params.body,
-    ContentType: params.contentType,
-    CacheControl: "no-store",
-    Metadata: {
-      "ghbot-format": "v1"
-    }
-  }));
+  await getR2Client(settings).send(
+    new PutObjectCommand({
+      Bucket: settings.bucket,
+      Key: params.key,
+      Body: params.body,
+      ContentType: params.contentType,
+      CacheControl: "no-store",
+      Metadata: {
+        "ghbot-format": "v1"
+      }
+    })
+  );
 }
 
 function readR2Settings(): R2Settings | undefined {
@@ -114,8 +120,16 @@ function normalizeEndpoint(value: string): string {
   } catch (error) {
     throw new Error("R2_ENDPOINT must be a valid HTTPS URL.", { cause: error });
   }
-  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
-    throw new Error("R2_ENDPOINT must be a credential-free HTTPS URL without query or fragment components.");
+  if (
+    endpoint.protocol !== "https:" ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.search ||
+    endpoint.hash
+  ) {
+    throw new Error(
+      "R2_ENDPOINT must be a credential-free HTTPS URL without query or fragment components."
+    );
   }
   endpoint.pathname = endpoint.pathname.replace(/\/+$/, "");
   return endpoint.toString().replace(/\/$/, "");

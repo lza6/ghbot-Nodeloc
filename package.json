@@ -11,7 +11,13 @@
     "test": "node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "webhook": "node dist/src/webhook/server.js",
-    "dev:webhook": "tsx src/webhook/server.ts"
+    "dev:webhook": "tsx src/webhook/server.ts",
+    "lint": "eslint src test",
+    "lint:fix": "eslint src test --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "ci:test": "node --import tsx --experimental-test-coverage --test test/**/*.test.ts",
+    "prepare": "node scripts/install-husky.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
@@ -22,8 +28,13 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
+    "eslint": "^10.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.67.0"
   }
 }

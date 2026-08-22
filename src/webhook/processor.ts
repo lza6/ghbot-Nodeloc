@@ -197,7 +197,12 @@ export async function processWebhookMention(
   const marker = `${WEBHOOK_CHAT_MARKER} delivery=${mention.deliveryId} source=${mention.sourceCommentId} -->`;
   if (await hasExistingWebhookReply(octokit, mention, marker)) {
     logger.info(
-      { owner: mention.owner, repo: mention.repo, issueNumber: mention.issueNumber, deliveryId: mention.deliveryId },
+      {
+        owner: mention.owner,
+        repo: mention.repo,
+        issueNumber: mention.issueNumber,
+        deliveryId: mention.deliveryId
+      },
       "Skipping an already answered webhook mention."
     );
     return;
@@ -239,10 +244,7 @@ export async function processWebhookMention(
   });
 }
 
-export function buildWebhookChatPrompt(
-  mention: WebhookMention,
-  context: WebhookContext
-): string {
+export function buildWebhookChatPrompt(mention: WebhookMention, context: WebhookContext): string {
   return [
     "You are a read-only GitHub webhook assistant answering a user who mentioned the bot.",
     "Answer the user's latest comment directly and concisely in GitHub-flavored Markdown.",
@@ -254,7 +256,11 @@ export function buildWebhookChatPrompt(
     "Do not repeat the bot mention or include hidden HTML markers.",
     "Return only the reply body, without a surrounding markdown fence.",
     "Requester:",
-    JSON.stringify({ login: mention.commenterLogin, type: mention.commenterType ?? "unknown" }, null, 2),
+    JSON.stringify(
+      { login: mention.commenterLogin, type: mention.commenterType ?? "unknown" },
+      null,
+      2
+    ),
     "Latest user comment:",
     mention.commentBody,
     "Repository and item context:",
@@ -262,7 +268,10 @@ export function buildWebhookChatPrompt(
   ].join("\n");
 }
 
-async function loadWebhookContext(octokit: Octokit, mention: WebhookMention): Promise<WebhookContext> {
+async function loadWebhookContext(
+  octokit: Octokit,
+  mention: WebhookMention
+): Promise<WebhookContext> {
   const [{ data: repository }, readme] = await Promise.all([
     octokit.rest.repos.get({ owner: mention.owner, repo: mention.repo }),
     loadReadme(octokit, mention.owner, mention.repo)
@@ -270,7 +279,11 @@ async function loadWebhookContext(octokit: Octokit, mention: WebhookMention): Pr
 
   if (mention.targetKind === "issue") {
     const [{ data: issue }, comments] = await Promise.all([
-      octokit.rest.issues.get({ owner: mention.owner, repo: mention.repo, issue_number: mention.issueNumber }),
+      octokit.rest.issues.get({
+        owner: mention.owner,
+        repo: mention.repo,
+        issue_number: mention.issueNumber
+      }),
       listIssueComments(octokit, mention.owner, mention.repo, mention.issueNumber)
     ]);
     return {
@@ -294,7 +307,11 @@ async function loadWebhookContext(octokit: Octokit, mention: WebhookMention): Pr
   }
 
   const [{ data: pullRequest }, files, comments] = await Promise.all([
-    octokit.rest.pulls.get({ owner: mention.owner, repo: mention.repo, pull_number: mention.issueNumber }),
+    octokit.rest.pulls.get({
+      owner: mention.owner,
+      repo: mention.repo,
+      pull_number: mention.issueNumber
+    }),
     listPullRequestFiles(octokit, mention.owner, mention.repo, mention.issueNumber),
     listIssueComments(octokit, mention.owner, mention.repo, mention.issueNumber)
   ]);
@@ -321,7 +338,12 @@ async function loadWebhookContext(octokit: Octokit, mention: WebhookMention): Pr
   };
 }
 
-async function listIssueComments(octokit: Octokit, owner: string, repo: string, issueNumber: number) {
+async function listIssueComments(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  issueNumber: number
+) {
   const comments = await octokit.paginate(octokit.rest.issues.listComments, {
     owner,
     repo,
@@ -369,7 +391,10 @@ async function loadReadme(octokit: Octokit, owner: string, repo: string): Promis
   }
 }
 
-export async function getCommenterPermission(octokit: Octokit, mention: WebhookMention): Promise<string | null> {
+export async function getCommenterPermission(
+  octokit: Octokit,
+  mention: WebhookMention
+): Promise<string | null> {
   if (config.webhookChatPermission === "anyone") {
     return "anyone";
   }
@@ -383,25 +408,34 @@ export async function getCommenterPermission(octokit: Octokit, mention: WebhookM
       owner: mention.owner,
       repo: mention.repo
     });
-    if (repository.owner?.type === "Organization" && await isOrganizationMember(octokit, mention.owner, mention.commenterLogin)) {
+    if (
+      repository.owner?.type === "Organization" &&
+      (await isOrganizationMember(octokit, mention.owner, mention.commenterLogin))
+    ) {
       return "organization";
     }
   }
 
-  const { data } = await octokit.rest.repos.getCollaboratorPermissionLevel({
-    owner: mention.owner,
-    repo: mention.repo,
-    username: mention.commenterLogin
-  }).catch((error: unknown) => {
-    if (isNotFoundError(error)) {
-      return { data: { permission: null } };
-    }
-    throw error;
-  });
+  const { data } = await octokit.rest.repos
+    .getCollaboratorPermissionLevel({
+      owner: mention.owner,
+      repo: mention.repo,
+      username: mention.commenterLogin
+    })
+    .catch((error: unknown) => {
+      if (isNotFoundError(error)) {
+        return { data: { permission: null } };
+      }
+      throw error;
+    });
   return data.permission ?? null;
 }
 
-async function isOrganizationMember(octokit: Octokit, organization: string, login: string): Promise<boolean> {
+async function isOrganizationMember(
+  octokit: Octokit,
+  organization: string,
+  login: string
+): Promise<boolean> {
   try {
     await octokit.rest.orgs.checkMembershipForUser({
       org: organization,
@@ -412,7 +446,10 @@ async function isOrganizationMember(octokit: Octokit, organization: string, logi
     // A 404 means the commenter is not a member. A missing Members: read App
     // permission has the same safe fallback: use repository collaborator
     // permissions instead of granting organization-wide access.
-    logger.debug({ error, organization, login }, "Webhook commenter is not confirmed as an organization member.");
+    logger.debug(
+      { error, organization, login },
+      "Webhook commenter is not confirmed as an organization member."
+    );
     return false;
   }
 }
@@ -475,7 +512,9 @@ function isCreatedOrEdited(action: unknown): boolean {
 
 function isBotSender(sender: Record<string, unknown> | undefined, botName: string): boolean {
   const login = asString(sender?.login);
-  return sender?.type === "Bot" || (login !== undefined && login.toLowerCase() === botName.toLowerCase());
+  return (
+    sender?.type === "Bot" || (login !== undefined && login.toLowerCase() === botName.toLowerCase())
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -44,10 +44,7 @@ export async function writeKnowledgeScratch(snapshot: string, content: string): 
 }
 
 export async function readKnowledgeScratch(snapshot: string): Promise<string> {
-  const content = await fs.readFile(
-    path.join(snapshot, REPOSITORY_KNOWLEDGE_SCRATCH_PATH),
-    "utf8"
-  );
+  const content = await fs.readFile(path.join(snapshot, REPOSITORY_KNOWLEDGE_SCRATCH_PATH), "utf8");
   validateRepositoryKnowledge(content);
   return normalizeKnowledge(content);
 }

@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Octokit } from "@octokit/rest";
-import {
-  beginCommitReviewProgress,
-  finishCommitReviewProgress
-} from "../src/review/processor.js";
+import { beginCommitReviewProgress, finishCommitReviewProgress } from "../src/review/processor.js";
 
 const headSha = "1234567890abcdef1234567890abcdef12345678";
-const reviewMarker = "<!-- ghbot-review:v1 mode=normal outcome=pass requires-admin=false review=0 change=0 -->";
+const reviewMarker =
+  "<!-- ghbot-review:v1 mode=normal outcome=pass requires-admin=false review=0 change=0 -->";
 
 test("new commit progress is created once and reused for the same head", async () => {
   const comments: Array<{ id: number; body: string }> = [];

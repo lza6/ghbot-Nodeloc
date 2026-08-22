@@ -7,17 +7,9 @@ import { collectValidNewLines, toDiffPosition } from "../github/diff.js";
 import { logger } from "../logger.js";
 import { withRetry } from "../retry.js";
 import type { PullRequestFile, PullRequestRef, ReviewDecision, ReviewMode } from "../types.js";
-import {
-  deleteLocalReviewCache,
-  loadPreviousReview,
-  saveReviewCache
-} from "./cache.js";
+import { deleteLocalReviewCache, loadPreviousReview, saveReviewCache } from "./cache.js";
 import { GooseReviewer } from "./gooseReviewer.js";
-import {
-  formatFindingReviewBody,
-  formatReviewBody,
-  type CategorizedFinding
-} from "./format.js";
+import { formatFindingReviewBody, formatReviewBody, type CategorizedFinding } from "./format.js";
 import {
   approvedLoginsForHead,
   evaluateReviewDecision,
@@ -64,13 +56,22 @@ export async function processPullRequest(
   }
 
   if (pullRequest.state !== "open") {
-    logger.info({ owner, repo, pullNumber, state: pullRequest.state }, "Skipping non-open pull request.");
+    logger.info(
+      { owner, repo, pullNumber, state: pullRequest.state },
+      "Skipping non-open pull request."
+    );
     return;
   }
 
   if (!isReviewBranchEnabled(pullRequest.base.ref)) {
     logger.info(
-      { owner, repo, pullNumber, baseBranch: pullRequest.base.ref, reviewBranches: config.reviewBranches },
+      {
+        owner,
+        repo,
+        pullNumber,
+        baseBranch: pullRequest.base.ref,
+        reviewBranches: config.reviewBranches
+      },
       "Skipping pull request because its base branch does not match REVIEW_BRANCHES."
     );
     return;
@@ -86,7 +87,10 @@ export async function processPullRequest(
   });
   const repositoryKnowledge = config.repositoryKnowledgeEnabled
     ? await loadRepositoryKnowledge().catch((error: unknown) => {
-        logger.warn({ error, owner, repo, pullNumber }, "Ignoring unavailable repository knowledge.");
+        logger.warn(
+          { error, owner, repo, pullNumber },
+          "Ignoring unavailable repository knowledge."
+        );
         return undefined;
       })
     : undefined;
@@ -148,7 +152,10 @@ export async function processPullRequest(
       pullNumber,
       reason: decision.result.closeReason || "The automated review found clearly malicious code."
     });
-    logger.warn({ owner, repo, pullNumber }, "Closed pull request because malicious code was detected.");
+    logger.warn(
+      { owner, repo, pullNumber },
+      "Closed pull request because malicious code was detected."
+    );
     return;
   }
 
@@ -223,7 +230,10 @@ export async function processPullRequest(
           return;
         }
       } catch (error) {
-        logger.error({ err: error, owner, repo, pullNumber }, "Automatic conflict resolution failed safely.");
+        logger.error(
+          { err: error, owner, repo, pullNumber },
+          "Automatic conflict resolution failed safely."
+        );
         await withRetry("github.issues.createComment.conflictResolutionFailed", async () => {
           return octokit.rest.issues.createComment({
             owner,
@@ -258,7 +268,10 @@ export async function processScheduledPendingMerges(
   }
 ): Promise<void> {
   if (!config.autoMerge) {
-    logger.info({ owner: params.owner, repo: params.repo }, "Skipping scheduled pending merge check because AUTO_MERGE is disabled.");
+    logger.info(
+      { owner: params.owner, repo: params.repo },
+      "Skipping scheduled pending merge check because AUTO_MERGE is disabled."
+    );
     return;
   }
 
@@ -398,7 +411,8 @@ export async function finishCommitReviewProgress(
       per_page: 100
     });
     const published = reviews.some(
-      (review) => review.commit_id === params.headSha && Boolean(parseReviewStateMarker(review.body))
+      (review) =>
+        review.commit_id === params.headSha && Boolean(parseReviewStateMarker(review.body))
     );
     message = published
       ? `Automated review completed for commit \`${shortSha(params.headSha)}\`. The latest review result and \`${CHECK_RUN_NAME}\` check now reflect this commit.`
@@ -452,7 +466,12 @@ export async function processPullRequestReviewApproval(
 
   if (!isReviewBranchEnabled(pullRequest.base.ref)) {
     logger.info(
-      { owner: params.owner, repo: params.repo, pullNumber: params.pullNumber, baseBranch: pullRequest.base.ref },
+      {
+        owner: params.owner,
+        repo: params.repo,
+        pullNumber: params.pullNumber,
+        baseBranch: pullRequest.base.ref
+      },
       "Ignoring approval for a pull request outside REVIEW_BRANCHES."
     );
     return;
@@ -467,23 +486,30 @@ export async function processPullRequestReviewApproval(
 
   if (!latestReviewOutcome || latestReviewOutcome.outcome !== "pass") {
     logger.info(
-      { owner: params.owner, repo: params.repo, pullNumber: params.pullNumber, commitId: params.commitId },
+      {
+        owner: params.owner,
+        repo: params.repo,
+        pullNumber: params.pullNumber,
+        commitId: params.commitId
+      },
       "Ignoring approval because there is no successful bot review for the current head."
     );
     return;
   }
 
-  const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
-    owner: params.owner,
-    repo: params.repo,
-    username: params.reviewerLogin
-  }).catch((error: unknown) => {
-    if (isNotFoundError(error)) {
-      return { data: { permission: null } };
-    }
+  const { data: permission } = await octokit.rest.repos
+    .getCollaboratorPermissionLevel({
+      owner: params.owner,
+      repo: params.repo,
+      username: params.reviewerLogin
+    })
+    .catch((error: unknown) => {
+      if (isNotFoundError(error)) {
+        return { data: { permission: null } };
+      }
 
-    throw error;
-  });
+      throw error;
+    });
 
   const requireAdmin = latestReviewOutcome.requiresAdminApproval;
   const allowedPermissions = requireAdmin
@@ -542,7 +568,6 @@ export async function processRecheckComment(
     return;
   }
 
-
   const { data: pullRequest } = await octokit.rest.pulls.get({
     owner: params.owner,
     repo: params.repo,
@@ -550,23 +575,30 @@ export async function processRecheckComment(
   });
   if (!isReviewBranchEnabled(pullRequest.base.ref)) {
     logger.info(
-      { owner: params.owner, repo: params.repo, pullNumber: params.pullNumber, baseBranch: pullRequest.base.ref },
+      {
+        owner: params.owner,
+        repo: params.repo,
+        pullNumber: params.pullNumber,
+        baseBranch: pullRequest.base.ref
+      },
       "Ignoring recheck outside REVIEW_BRANCHES."
     );
     return;
   }
 
-  const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
-    owner: params.owner,
-    repo: params.repo,
-    username: params.commenterLogin
-  }).catch((error: unknown) => {
-    if (isNotFoundError(error)) {
-      return { data: { permission: null } };
-    }
+  const { data: permission } = await octokit.rest.repos
+    .getCollaboratorPermissionLevel({
+      owner: params.owner,
+      repo: params.repo,
+      username: params.commenterLogin
+    })
+    .catch((error: unknown) => {
+      if (isNotFoundError(error)) {
+        return { data: { permission: null } };
+      }
 
-    throw error;
-  });
+      throw error;
+    });
 
   const allowedPermissions = new Set(["admin", "maintain", "write"]);
 
@@ -577,7 +609,7 @@ export async function processRecheckComment(
         repo: params.repo,
         pullNumber: params.pullNumber,
         commenterLogin: params.commenterLogin,
-        permission: permission.permission,
+        permission: permission.permission
       },
       "Ignoring recheck comment because commenter does not have write permission."
     );
@@ -640,17 +672,22 @@ export async function processConflictComment(
     return;
   }
 
-  const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
-    owner: params.owner,
-    repo: params.repo,
-    username: params.commenterLogin
-  }).catch((error: unknown) => {
-    if (isNotFoundError(error)) {
-      return { data: { permission: null } };
-    }
-    throw error;
-  });
-  if (!permission.permission || !new Set(["admin", "maintain", "write"]).has(permission.permission)) {
+  const { data: permission } = await octokit.rest.repos
+    .getCollaboratorPermissionLevel({
+      owner: params.owner,
+      repo: params.repo,
+      username: params.commenterLogin
+    })
+    .catch((error: unknown) => {
+      if (isNotFoundError(error)) {
+        return { data: { permission: null } };
+      }
+      throw error;
+    });
+  if (
+    !permission.permission ||
+    !new Set(["admin", "maintain", "write"]).has(permission.permission)
+  ) {
     logger.info(
       {
         owner: params.owner,
@@ -678,12 +715,25 @@ export async function processConflictComment(
     repo: params.repo,
     pull_number: params.pullNumber
   });
-  if (pullRequest.state !== "open" || pullRequest.draft || !isReviewBranchEnabled(pullRequest.base.ref)) {
-    await postConflictCommandComment(octokit, params, "This PR is not an open, non-draft pull request on a configured review branch, so no conflict-resolution commit was created.");
+  if (
+    pullRequest.state !== "open" ||
+    pullRequest.draft ||
+    !isReviewBranchEnabled(pullRequest.base.ref)
+  ) {
+    await postConflictCommandComment(
+      octokit,
+      params,
+      "This PR is not an open, non-draft pull request on a configured review branch, so no conflict-resolution commit was created."
+    );
     return;
   }
 
-  const mergeablePullRequest = await waitForMergeable(octokit, params.owner, params.repo, params.pullNumber);
+  const mergeablePullRequest = await waitForMergeable(
+    octokit,
+    params.owner,
+    params.repo,
+    params.pullNumber
+  );
   const eligible = canAutoResolveConflicts({
     enabled: true,
     reviewPassed: true,
@@ -696,11 +746,13 @@ export async function processConflictComment(
     currentHeadSha: mergeablePullRequest.head.sha
   });
   if (!eligible) {
-    const reason = pullRequest.head.repo?.full_name !== `${params.owner}/${params.repo}` && !pullRequest.maintainer_can_modify
-      ? "The PR comes from an external fork whose contributor has disabled maintainer edits. Enable ‘Allow edits from maintainers’, then run /conflict again."
-      : mergeablePullRequest.mergeable_state !== "dirty"
-        ? `GitHub does not currently report a merge conflict (mergeable=${mergeablePullRequest.mergeable}, mergeable_state=${mergeablePullRequest.mergeable_state}).`
-        : "The PR head changed while conflict eligibility was being checked. Run /conflict again on the latest head.";
+    const reason =
+      pullRequest.head.repo?.full_name !== `${params.owner}/${params.repo}` &&
+      !pullRequest.maintainer_can_modify
+        ? "The PR comes from an external fork whose contributor has disabled maintainer edits. Enable ‘Allow edits from maintainers’, then run /conflict again."
+        : mergeablePullRequest.mergeable_state !== "dirty"
+          ? `GitHub does not currently report a merge conflict (mergeable=${mergeablePullRequest.mergeable}, mergeable_state=${mergeablePullRequest.mergeable_state}).`
+          : "The PR head changed while conflict eligibility was being checked. Run /conflict again on the latest head.";
     await postConflictCommandComment(octokit, params, reason);
     return;
   }
@@ -740,14 +792,17 @@ export async function processConflictComment(
         : "The PR changed or no resolvable conflict remained before push, so no commit was created."
     );
   } catch (error) {
-    logger.error({
-      err: error,
-      owner: params.owner,
-      repo: params.repo,
-      pullNumber: params.pullNumber,
-      commentId: params.commentId,
-      commenterLogin: params.commenterLogin
-    }, "Manual conflict resolution failed safely.");
+    logger.error(
+      {
+        err: error,
+        owner: params.owner,
+        repo: params.repo,
+        pullNumber: params.pullNumber,
+        commentId: params.commentId,
+        commenterLogin: params.commenterLogin
+      },
+      "Manual conflict resolution failed safely."
+    );
     await postConflictCommandComment(
       octokit,
       params,
@@ -813,12 +868,16 @@ async function maybeMergePullRequest(
           });
         });
       }
-      logger.info({ owner, repo, pullNumber }, "Waiting for administrator approval before merging.");
+      logger.info(
+        { owner, repo, pullNumber },
+        "Waiting for administrator approval before merging."
+      );
       return;
     }
   }
 
-  const mergeablePullRequest = params.mergeablePullRequest ?? await waitForMergeable(octokit, owner, repo, pullNumber);
+  const mergeablePullRequest =
+    params.mergeablePullRequest ?? (await waitForMergeable(octokit, owner, repo, pullNumber));
   if (mergeablePullRequest.mergeable !== true || mergeablePullRequest.mergeable_state === "dirty") {
     if (params.emitStatusComments) {
       await withRetry("github.issues.createComment.notMergeable", async () => {
@@ -895,17 +954,19 @@ async function hasCurrentHeadApprovalFrom(
 
   for (const login of approvedLogins) {
     try {
-      const { data: permission } = await octokit.rest.repos.getCollaboratorPermissionLevel({
-        owner: params.owner,
-        repo: params.repo,
-        username: login
-      }).catch((error: unknown) => {
-        if (isNotFoundError(error)) {
-          return { data: { permission: null } };
-        }
+      const { data: permission } = await octokit.rest.repos
+        .getCollaboratorPermissionLevel({
+          owner: params.owner,
+          repo: params.repo,
+          username: login
+        })
+        .catch((error: unknown) => {
+          if (isNotFoundError(error)) {
+            return { data: { permission: null } };
+          }
 
-        throw error;
-      });
+          throw error;
+        });
 
       if (!permission.permission) {
         continue;
@@ -1063,9 +1124,16 @@ async function submitReview(
       ];
     });
 
-    const body = phase.phase === "final"
-      ? formatReviewBody(params.decision, [], params.mode, disposition)
-      : formatFindingReviewBody(params.decision, phase.phase, unpostedFindings, params.mode, disposition);
+    const body =
+      phase.phase === "final"
+        ? formatReviewBody(params.decision, [], params.mode, disposition)
+        : formatFindingReviewBody(
+            params.decision,
+            phase.phase,
+            unpostedFindings,
+            params.mode,
+            disposition
+          );
     const reviewId = await createGitHubReview(octokit, {
       owner: params.owner,
       repo: params.repo,
@@ -1197,9 +1265,8 @@ async function upsertReviewCheckRun(
   }
 ): Promise<void> {
   const disposition = evaluateReviewDecision(params.decision);
-  const conclusion = disposition.blocksMerge || disposition.requiresAdminApproval
-    ? "action_required"
-    : "success";
+  const conclusion =
+    disposition.blocksMerge || disposition.requiresAdminApproval ? "action_required" : "success";
 
   await withRetry("github.checks.create", async () => {
     return octokit.rest.checks.create({
@@ -1215,7 +1282,7 @@ async function upsertReviewCheckRun(
           ? "Malicious code detected"
           : disposition.requiresAdminApproval
             ? "Review notes require administrator approval"
-          : `${params.mode === "strict" ? "Strict" : "Normal"} review completed`,
+            : `${params.mode === "strict" ? "Strict" : "Normal"} review completed`,
         summary: params.decision.result.shouldClosePullRequest
           ? `${params.decision.result.summary}\n\nClose reason: ${params.decision.result.closeReason}`
           : params.decision.result.summary
@@ -1238,7 +1305,9 @@ async function markReviewCheckApproved(
   });
   const check = checks.data.check_runs
     .filter((item) => item.name === CHECK_RUN_NAME)
-    .sort((left, right) => Date.parse(right.started_at ?? "") - Date.parse(left.started_at ?? ""))[0];
+    .sort(
+      (left, right) => Date.parse(right.started_at ?? "") - Date.parse(left.started_at ?? "")
+    )[0];
 
   if (!check) {
     throw new Error(`Could not find ${CHECK_RUN_NAME} check for ${params.headSha}.`);
@@ -1254,7 +1323,8 @@ async function markReviewCheckApproved(
       external_id: check.external_id ?? undefined,
       output: {
         title: "Repository administrator approved review notes",
-        summary: "The current pull request head has the administrator approval required by REVIEW_POLICY=require_approval."
+        summary:
+          "The current pull request head has the administrator approval required by REVIEW_POLICY=require_approval."
       },
       details_url: `https://github.com/${params.owner}/${params.repo}/pull/${params.pullNumber}`
     });
@@ -1297,12 +1367,7 @@ async function closeMaliciousPullRequest(
   });
 }
 
-async function waitForMergeable(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  pullNumber: number
-) {
+async function waitForMergeable(octokit: Octokit, owner: string, repo: string, pullNumber: number) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const { data } = await octokit.rest.pulls.get({
       owner,
@@ -1369,18 +1434,21 @@ export async function supersedePreviousBotReviews(
       const commentsWithNodeIds = comments.filter(
         (comment): comment is typeof comment & { node_id: string } => Boolean(comment.node_id)
       );
-      const commentsToDelete = new Set(comments.filter((comment) => !comment.node_id).map((comment) => comment.id));
+      const commentsToDelete = new Set(
+        comments.filter((comment) => !comment.node_id).map((comment) => comment.id)
+      );
       if (commentsWithNodeIds.length > 0) {
         let resolvedCommentNodeIds = new Set<string>();
         try {
           resolvedCommentNodeIds = await withRetry(
             "github.graphql.resolveReviewThread.superseded",
-            async () => resolveReviewThreadsForComments(octokit, {
-              owner: params.owner,
-              repo: params.repo,
-              pullNumber: params.pullNumber,
-              commentNodeIds: commentsWithNodeIds.map((comment) => comment.node_id)
-            })
+            async () =>
+              resolveReviewThreadsForComments(octokit, {
+                owner: params.owner,
+                repo: params.repo,
+                pullNumber: params.pullNumber,
+                commentNodeIds: commentsWithNodeIds.map((comment) => comment.node_id)
+              })
           );
         } catch (error) {
           logger.warn(
@@ -1539,7 +1607,9 @@ async function resolveReviewThreadsForComments(
       const threadCommentNodeIds = (thread.comments?.nodes ?? [])
         .map((comment) => comment?.id)
         .filter((commentId): commentId is string => typeof commentId === "string");
-      const matchingCommentNodeIds = threadCommentNodeIds.filter((commentId) => targetCommentNodeIds.has(commentId));
+      const matchingCommentNodeIds = threadCommentNodeIds.filter((commentId) =>
+        targetCommentNodeIds.has(commentId)
+      );
       if (matchingCommentNodeIds.length === 0) {
         continue;
       }
@@ -1593,17 +1663,22 @@ async function resolveReviewThreadsForComments(
       }
     }
 
-    after = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor ?? null : null;
+    after = threads.pageInfo.hasNextPage ? (threads.pageInfo.endCursor ?? null) : null;
   } while (after);
 
   return matchedCommentNodeIds;
 }
 
 function extractReviewStateMarker(body: string | null | undefined): string {
-  return body?.match(/<!-- ghbot-review:v1[^>]*-->/)?.[0] ?? "<!-- ghbot-review:v1 superseded=true -->";
+  return (
+    body?.match(/<!-- ghbot-review:v1[^>]*-->/)?.[0] ?? "<!-- ghbot-review:v1 superseded=true -->"
+  );
 }
 
-function shouldFallbackToCommentReview(error: unknown, event: "APPROVE" | "COMMENT" | "REQUEST_CHANGES"): boolean {
+function shouldFallbackToCommentReview(
+  error: unknown,
+  event: "APPROVE" | "COMMENT" | "REQUEST_CHANGES"
+): boolean {
   if (event !== "APPROVE") {
     return false;
   }

@@ -16,11 +16,18 @@ test("repository knowledge round trips through the agent scratch file", async ()
   try {
     await writeKnowledgeScratch(root, "# Architecture\n\nUse npm test.\n");
     assert.equal(await readKnowledgeScratch(root), "# Architecture\n\nUse npm test.\n");
-    assert.equal((await fs.stat(path.join(root, ".ghbot"))).mode & 0o777, 0o777);
-    assert.equal(
-      (await fs.stat(path.join(root, ".ghbot", "repository-knowledge.md"))).mode & 0o777,
-      0o666
-    );
+    // Windows maps every chmod to the read/write bits (no execute bit), so the
+    // container-facing 0o777/0o666 contract can only be asserted on POSIX.
+    if (process.platform === "win32") {
+      assert.equal((await fs.stat(path.join(root, ".ghbot"))).mode & 0o222, 0o222);
+      assert.equal((await fs.stat(path.join(root, ".ghbot", "repository-knowledge.md"))).mode & 0o222, 0o222);
+    } else {
+      assert.equal((await fs.stat(path.join(root, ".ghbot"))).mode & 0o777, 0o777);
+      assert.equal(
+        (await fs.stat(path.join(root, ".ghbot", "repository-knowledge.md"))).mode & 0o777,
+        0o666
+      );
+    }
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
