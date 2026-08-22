@@ -50,6 +50,7 @@ type IssueCommentPayload = {
     body: string;
     user: {
       login: string;
+      type?: string;
     };
   };
   repository: GitHubRepository;
@@ -239,31 +240,66 @@ async function main(): Promise<void> {
         return;
       }
 
-      await processRecheckComment(octokit, {
-        owner: commentPayload.repository.owner.login,
-        repo: commentPayload.repository.name,
-        pullNumber: commentPayload.issue.number,
-        commentId: commentPayload.comment.id,
-        commenterLogin: commentPayload.comment.user.login,
-        commentBody: commentPayload.comment.body,
-        gitToken: github.token
-      });
-      await processConflictComment(octokit, {
-        owner: commentPayload.repository.owner.login,
-        repo: commentPayload.repository.name,
-        pullNumber: commentPayload.issue.number,
-        commentId: commentPayload.comment.id,
-        commenterLogin: commentPayload.comment.user.login,
-        commentBody: commentPayload.comment.body,
-        gitToken: github.token
-      });
-      await processPullRequestChat(octokit, {
-        owner: commentPayload.repository.owner.login,
-        repo: commentPayload.repository.name,
-        pullNumber: commentPayload.issue.number,
-        commentId: commentPayload.comment.id,
-        commenterLogin: commentPayload.comment.user.login,
-        commentBody: commentPayload.comment.body
+      if (commentPayload.comment.user?.type === "Bot") {
+        logger.info(
+          { issueNumber: commentPayload.issue.number, login: commentPayload.comment.user.login },
+          "Skipping bot-authored comment to prevent automation loops."
+        );
+        return;
+      }
+
+      // The three comment commands are independent features; one failing or
+      // not matching must not prevent the others from running.
+      const commentTasks: Array<[string, () => Promise<void>]> = [
+        [
+          "recheck",
+          () =>
+            processRecheckComment(octokit, {
+              owner: commentPayload.repository.owner.login,
+              repo: commentPayload.repository.name,
+              pullNumber: commentPayload.issue.number,
+              commentId: commentPayload.comment.id,
+              commenterLogin: commentPayload.comment.user.login,
+              commentBody: commentPayload.comment.body,
+              gitToken: github.token
+            })
+        ],
+        [
+          "conflict",
+          () =>
+            processConflictComment(octokit, {
+              owner: commentPayload.repository.owner.login,
+              repo: commentPayload.repository.name,
+              pullNumber: commentPayload.issue.number,
+              commentId: commentPayload.comment.id,
+              commenterLogin: commentPayload.comment.user.login,
+              commentBody: commentPayload.comment.body,
+              gitToken: github.token
+            })
+        ],
+        [
+          "chat",
+          () =>
+            processPullRequestChat(octokit, {
+              owner: commentPayload.repository.owner.login,
+              repo: commentPayload.repository.name,
+              pullNumber: commentPayload.issue.number,
+              commentId: commentPayload.comment.id,
+              commenterLogin: commentPayload.comment.user.login,
+              commentBody: commentPayload.comment.body
+            })
+        ]
+      ];
+
+      const results = await Promise.allSettled(commentTasks.map(([, run]) => run()));
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          const [label] = commentTasks[index]!;
+          logger.error(
+            { error: result.reason, task: label, issueNumber: commentPayload.issue.number },
+            "Comment command handler failed; other handlers still ran."
+          );
+        }
       });
       return;
     }
