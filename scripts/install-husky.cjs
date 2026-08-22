@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * Windows 兼容的 husky 安装器（不使用 .sh 脚本）。
- * 用本仓库自带的 Node 脚本把 husky 的 prepare 钩子写到 .git/hooks/pre-commit。
+ * Windows 兼容的 pre-commit 钩子安装器（不使用 .sh 业务脚本）。
+ * 钩子内部用仓库相对路径调用 Node 脚本，避免绝对路径中的空格/中文目录问题。
  */
 "use strict";
 
 const fs = require("node:fs");
 const path = require("node:path");
-const os = require("node:os");
 
 const root = path.resolve(__dirname, "..");
 const gitDir = path.join(root, ".git");
@@ -21,12 +20,8 @@ if (!fs.existsSync(gitDir)) {
 
 fs.mkdirSync(hooksDir, { recursive: true });
 
-const separator = os.platform() === "win32" ? "\\" : "/";
-const nodeBinary = process.execPath;
-const hookScript = [
-  "#!/bin/sh",
-  `node "${nodeBinary.replace(/\\/g, "/")}" "${path.join(root, "scripts", "husky-pre-commit.cjs").replace(/\\/g, "/")}"`,
-].join("\n");
+// git hooks 以仓库根为工作目录，相对路径在 Windows 与 POSIX 下都可靠。
+const hookScript = ["#!/bin/sh", 'node scripts/husky-pre-commit.cjs'].join("\n");
 
 fs.writeFileSync(hookPath, `${hookScript}\n`, { mode: 0o755 });
 console.log(`[install-husky] 已写入 git pre-commit 钩子: ${hookPath}`);

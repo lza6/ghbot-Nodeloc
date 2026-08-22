@@ -3,6 +3,44 @@ import { logger } from "./logger.js";
 const MAX_ATTEMPTS = 5;
 const BASE_DELAY_MS = 1_000;
 
+const RETRYABLE_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "UND_ERR_CONNECT_TIMEOUT"
+]);
+
+/**
+ * Decide whether an error is worth retrying: server-side faults, rate limits,
+ * and transport failures are transient; ordinary 4xx responses are not.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as { status?: unknown; code?: unknown };
+  if (typeof candidate.status === "number") {
+    if (candidate.status === 429) {
+      return true;
+    }
+    if (candidate.status >= 500 && candidate.status < 600) {
+      return true;
+    }
+    return false;
+  }
+
+  if (typeof candidate.code === "string" && RETRYABLE_ERROR_CODES.has(candidate.code)) {
+    return true;
+  }
+
+  return false;
+}
+
 export async function withRetry<T>(
   label: string,
   operation: () => Promise<T>,
@@ -26,12 +64,13 @@ export async function withRetry<T>(
           error,
           label,
           attempt,
-          maxAttempts
+          maxAttempts,
+          retryable: isRetryableError(error)
         },
         "Request failed."
       );
 
-      if (attempt === maxAttempts) {
+      if (attempt === maxAttempts || !isRetryableError(error)) {
         break;
       }
 

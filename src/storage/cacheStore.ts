@@ -41,6 +41,9 @@ export function pullRequestReviewHistoryObjectKey(
   headSha: string,
   prefix?: string
 ): string {
+  if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
+    throw new Error("Pull request number must be a positive integer.");
+  }
   if (!/^[0-9a-f]{40,64}$/i.test(headSha)) {
     throw new Error("Review head SHA must contain 40-64 hexadecimal characters.");
   }

@@ -113,7 +113,7 @@ function getR2Client(settings: R2Settings): S3Client {
   return cachedClient;
 }
 
-function normalizeEndpoint(value: string): string {
+export function normalizeEndpoint(value: string): string {
   let endpoint: URL;
   try {
     endpoint = new URL(value);
