@@ -45,7 +45,10 @@ export class GooseReviewer {
           input.files.map((file) => file.filename)
         );
         if (warnings.length > 0) {
-          logger.warn({ warnings }, "Review output contained findings that could not be posted inline.");
+          logger.warn(
+            { warnings },
+            "Review output contained findings that could not be posted inline."
+          );
         }
         return decision;
       },

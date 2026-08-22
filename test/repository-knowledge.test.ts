@@ -20,7 +20,10 @@ test("repository knowledge round trips through the agent scratch file", async ()
     // container-facing 0o777/0o666 contract can only be asserted on POSIX.
     if (process.platform === "win32") {
       assert.equal((await fs.stat(path.join(root, ".ghbot"))).mode & 0o222, 0o222);
-      assert.equal((await fs.stat(path.join(root, ".ghbot", "repository-knowledge.md"))).mode & 0o222, 0o222);
+      assert.equal(
+        (await fs.stat(path.join(root, ".ghbot", "repository-knowledge.md"))).mode & 0o222,
+        0o222
+      );
     } else {
       assert.equal((await fs.stat(path.join(root, ".ghbot"))).mode & 0o777, 0o777);
       assert.equal(

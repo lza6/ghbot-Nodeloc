@@ -39,9 +39,7 @@ test("toDiffPosition maps valid new lines and rejects stale ones", () => {
 });
 
 test("hunk headers with ranges are parsed correctly", () => {
-  const valid = collectValidNewLines([
-    file("@@ -10,5 +20,3 @@\n+first\n+second\n+third")
-  ]);
+  const valid = collectValidNewLines([file("@@ -10,5 +20,3 @@\n+first\n+second\n+third")]);
   assert.equal(valid.has("src/a.ts:20"), true);
   assert.equal(valid.has("src/a.ts:22"), true);
   assert.equal(valid.has("src/a.ts:23"), false);

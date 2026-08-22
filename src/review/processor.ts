@@ -943,7 +943,10 @@ async function maybeMergePullRequest(
     // A concurrent schedule run or approval event may have merged this head
     // first. GitHub answers 405 with "was already merged"; treat it as done.
     if (isAlreadyMergedError(error)) {
-      logger.info({ owner, repo, pullNumber, headSha: params.headSha }, "Pull request was already merged by a concurrent run.");
+      logger.info(
+        { owner, repo, pullNumber, headSha: params.headSha },
+        "Pull request was already merged by a concurrent run."
+      );
       return;
     }
     throw error;
@@ -958,7 +961,10 @@ function isAlreadyMergedError(error: unknown): boolean {
   if (candidate.status !== 405 && candidate.status !== 409) {
     return false;
   }
-  return typeof candidate.message === "string" && /already.{0,20}merged|Pull Request is not mergeable/i.test(candidate.message);
+  return (
+    typeof candidate.message === "string" &&
+    /already.{0,20}merged|Pull Request is not mergeable/i.test(candidate.message)
+  );
 }
 
 async function hasCurrentHeadApprovalFrom(

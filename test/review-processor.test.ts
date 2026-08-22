@@ -54,7 +54,8 @@ test("a clean decision submits a single final APPROVE review", () => {
 });
 
 test("superseded review bodies keep the original state marker", () => {
-  const marker = "<!-- ghbot-review:v1 mode=normal outcome=pass requires-admin=false review=0 change=0 -->";
+  const marker =
+    "<!-- ghbot-review:v1 mode=normal outcome=pass requires-admin=false review=0 change=0 -->";
   const body = formatSupersededReviewBody({
     originalMarker: marker,
     oldCommitId: "a".repeat(40),

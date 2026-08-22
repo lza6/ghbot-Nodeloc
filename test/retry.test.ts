@@ -52,20 +52,18 @@ test("throws the last error after exhausting attempts", async () => {
       },
       { maxAttempts: 3, baseDelayMs: 1 }
     ),
-      /boom 3$/
-    );
+    /boom 3$/
+  );
   assert.equal(attempts, 3);
 });
 
 test("4xx errors are not retried by default", async () => {
   let attempts = 0;
   await assert.rejects(
-    withRetry(
-      "probe.client-error",
-      async () => {
-        attempts += 1;
-        throw new HttpLikeError(404, "not found");
-      })
+    withRetry("probe.client-error", async () => {
+      attempts += 1;
+      throw new HttpLikeError(404, "not found");
+    })
   );
   assert.equal(attempts, 1);
 });

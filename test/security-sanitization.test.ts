@@ -9,7 +9,14 @@ import {
 import { containsSecret, redactSecrets } from "../src/security/secrets.js";
 
 test("protected basenames cover env files, agent configs, and deploy configs", () => {
-  for (const name of [".env", ".env.local", ".ENV", "AGENTS.MD", "opencode.json", "wrangler.toml"]) {
+  for (const name of [
+    ".env",
+    ".env.local",
+    ".ENV",
+    "AGENTS.MD",
+    "opencode.json",
+    "wrangler.toml"
+  ]) {
     assert.equal(isProtectedBasename(name), true, `${name} should be protected`);
   }
   assert.equal(isProtectedBasename("environment.ts"), false);

@@ -8,14 +8,8 @@ import {
 } from "../src/storage/cacheStore.js";
 
 test("object keys are scoped by repository id, pull number, and optional prefix", () => {
-  assert.equal(
-    repositoryKnowledgeObjectKey("123"),
-    "repositories/123/knowledge/repository.md"
-  );
-  assert.equal(
-    pullRequestReviewObjectKey("123", 7),
-    "repositories/123/pulls/7/latest.json"
-  );
+  assert.equal(repositoryKnowledgeObjectKey("123"), "repositories/123/knowledge/repository.md");
+  assert.equal(pullRequestReviewObjectKey("123", 7), "repositories/123/pulls/7/latest.json");
   assert.equal(
     pullRequestReviewObjectKey("123", 7, "forum-1"),
     "forum-1/repositories/123/pulls/7/latest.json"
