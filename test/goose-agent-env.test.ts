@@ -3,7 +3,6 @@ import test from "node:test";
 import { buildGooseAgentEnvironment, extractGooseFinalText, redactProcessArgs } from "../src/ai/gooseCli.js";
 import { config } from "../src/config.js";
 
-const originalModel = config.gooseModel;
 const originalEffort = config.gooseThinkingEffort;
 
 test("agent environment isolates home dirs and never carries real credentials", () => {
