@@ -10,3 +10,6 @@ pnpm-debug.log*
 .ghbot-tmp/
 .ghbot-cache/
 .ghbot-knowledge/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+graft/
