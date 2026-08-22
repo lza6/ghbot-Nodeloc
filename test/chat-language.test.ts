@@ -3,8 +3,7 @@ import test from "node:test";
 import {
   buildChatRequesterContext,
   chatReplyLanguageInstruction,
-  chatToolBudgetInstruction,
-  containsBotMention
+  chatToolBudgetInstruction
 } from "../src/chat/processor.js";
 
 test("chinese comments produce chinese reply instructions", () => {
