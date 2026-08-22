@@ -232,6 +232,19 @@ An eligible repository user can comment the exact command:
 
 The bot attempts conflict repair only when GitHub reports the current open PR as conflicted and the head is writable. External forks require **Allow edits from maintainers**; their resolved head is pushed with a force lease pinned to the reviewed SHA. It runs the same configured validation and separate final goose confirmation used by automatic repair, then pushes only if both succeed and the head has not changed.
 
+## Development gates
+
+All changes must pass the local gates before push; CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) enforces the same checks on GitHub:
+
+```bash
+npm run typecheck    # TypeScript strict check
+npm run lint         # ESLint (flat config)
+npm run format:check # Prettier formatting
+npm test             # node:test suite
+```
+
+The optional webhook service exposes `GET /healthz` and `GET /metrics` (Prometheus text format) for probes and dashboards.
+
 ## Local development
 
 ```bash

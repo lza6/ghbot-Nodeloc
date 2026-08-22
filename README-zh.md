@@ -242,6 +242,19 @@ secrets:
 
 只有当 GitHub 报告当前开放 PR 存在冲突且 head 可写时才会尝试修复。外部 fork 必须开启 **Allow edits from maintainers**，并通过绑定已审核 SHA 的 force-with-lease 安全更新贡献者分支。它会运行与自动修复相同的可信验证命令和第二次 goose 最终确认；两者成功且远端 head 未变化时才会创建 commit 并 push。
 
+## 开发门禁
+
+所有改动在推送前必须通过本地门禁；CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在 GitHub 上执行相同检查：
+
+```bash
+npm run typecheck    # TypeScript 严格检查
+npm run lint         # ESLint（flat config）
+npm run format:check # Prettier 格式检查
+npm test             # node:test 测试套件
+```
+
+可选的 webhook 服务提供 `GET /healthz` 与 `GET /metrics`（Prometheus 文本格式）用于探活与监控。
+
 ## 本地开发
 
 需要 Node.js 22 至 25。PR comment Agent 的全工具集成测试还需要可用的 Docker daemon。

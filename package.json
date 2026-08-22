@@ -1,6 +1,6 @@
 {
   "name": "ghbot",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,8 +16,7 @@
     "lint:fix": "eslint src test --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
-    "ci:test": "node --import tsx --experimental-test-coverage --test test/**/*.test.ts",
-    "prepare": "node scripts/install-husky.cjs"
+    "ci:test": "node --import tsx --experimental-test-coverage --test test/**/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
