@@ -848,6 +848,22 @@ async function maybeMergePullRequest(
     return;
   }
 
+  // Re-check the live PR state immediately before merging so a concurrent run
+  // (schedule recheck or approval event) that already merged or closed the PR
+  // does not trigger a duplicate merge request.
+  const { data: livePullRequest } = await octokit.rest.pulls.get({
+    owner,
+    repo,
+    pull_number: pullNumber
+  });
+  if (livePullRequest.state !== "open") {
+    logger.info(
+      { owner, repo, pullNumber, state: livePullRequest.state },
+      "Skipping merge because the pull request is no longer open."
+    );
+    return;
+  }
+
   if (params.requireAdminApproval) {
     const approvedByEligibleReviewer = await hasCurrentHeadApprovalFrom(octokit, {
       owner,
@@ -913,15 +929,36 @@ async function maybeMergePullRequest(
     }
   }
 
-  await withRetry("github.pulls.merge", async () => {
-    return octokit.rest.pulls.merge({
-      owner,
-      repo,
-      pull_number: pullNumber,
-      merge_method: config.mergeMethod,
-      commit_title: `${params.title} (#${pullNumber})`
+  try {
+    await withRetry("github.pulls.merge", async () => {
+      return octokit.rest.pulls.merge({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        merge_method: config.mergeMethod,
+        commit_title: `${params.title} (#${pullNumber})`
+      });
     });
-  });
+  } catch (error) {
+    // A concurrent schedule run or approval event may have merged this head
+    // first. GitHub answers 405 with "was already merged"; treat it as done.
+    if (isAlreadyMergedError(error)) {
+      logger.info({ owner, repo, pullNumber, headSha: params.headSha }, "Pull request was already merged by a concurrent run.");
+      return;
+    }
+    throw error;
+  }
+}
+
+function isAlreadyMergedError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("status" in error)) {
+    return false;
+  }
+  const candidate = error as { status?: unknown; message?: unknown };
+  if (candidate.status !== 405 && candidate.status !== 409) {
+    return false;
+  }
+  return typeof candidate.message === "string" && /already.{0,20}merged|Pull Request is not mergeable/i.test(candidate.message);
 }
 
 async function hasCurrentHeadApprovalFrom(
