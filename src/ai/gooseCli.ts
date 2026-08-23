@@ -7,6 +7,7 @@ import process from "node:process";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { startOneRunApiProxy } from "./apiProxy.js";
+import { tempRootDirectory } from "../runtimePaths.js";
 
 const GOOSE_RUN_TIMEOUT_MS = 10 * 60 * 1000;
 const GOOSE_DOCKER_IMAGE = "node:24-bookworm";
@@ -56,7 +57,7 @@ export async function runGoosePrompt(
     throw new Error("GOOSE_API_KEY is required when running a goose prompt.");
   }
 
-  const tempRoot = path.join(process.cwd(), ".ghbot-tmp");
+  const tempRoot = tempRootDirectory();
   await fs.mkdir(tempRoot, { recursive: true });
   const tempDir = await fs.mkdtemp(path.join(tempRoot, "goose-"));
   const workingDirectory = options.workingDirectory

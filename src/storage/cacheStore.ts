@@ -6,6 +6,7 @@ import {
   validateRepositoryKnowledge
 } from "../repository/knowledge.js";
 import { parseReviewCacheContent } from "../review/cache.js";
+import { runtimeDirectory as resolveRuntimeDirectory } from "../runtimePaths.js";
 import { downloadR2Object, isR2Configured, uploadR2Object } from "./r2.js";
 
 const MAX_REVIEW_CACHE_BYTES = 256 * 1024;
@@ -62,7 +63,7 @@ export async function restorePersistentCache(params: {
   if (!params.storage && !isR2Configured()) {
     return;
   }
-  const runtimeDirectory = params.runtimeDirectory ?? process.cwd();
+  const runtimeDirectory = params.runtimeDirectory ?? resolveRuntimeDirectory();
   const storage = params.storage ?? r2Store;
 
   await restoreObject({
@@ -95,7 +96,7 @@ export async function savePersistentCache(params: {
   if (!params.storage && !isR2Configured()) {
     return;
   }
-  const runtimeDirectory = params.runtimeDirectory ?? process.cwd();
+  const runtimeDirectory = params.runtimeDirectory ?? resolveRuntimeDirectory();
   const storage = params.storage ?? r2Store;
 
   if (params.saveRepositoryKnowledge) {

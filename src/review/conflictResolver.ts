@@ -9,6 +9,7 @@ import { createRepositorySnapshot } from "../chat/processor.js";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
+import { tempRootDirectory } from "../runtimePaths.js";
 import {
   loadRepositoryKnowledge,
   REPOSITORY_KNOWLEDGE_SCRATCH_PATH,
@@ -99,7 +100,7 @@ export async function resolvePullRequestConflicts(
   }
 
   const worktree = await fs.realpath(params.worktree);
-  const tempRoot = path.join(process.cwd(), ".ghbot-tmp");
+  const tempRoot = tempRootDirectory();
   await fs.mkdir(tempRoot, { recursive: true });
   const askPassDirectory = await fs.mkdtemp(path.join(tempRoot, "git-auth-"));
   const askPassPath = path.join(askPassDirectory, "askpass.sh");

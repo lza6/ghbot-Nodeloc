@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { logger } from "../logger.js";
+import { cacheRootDirectory } from "../runtimePaths.js";
 import type { ReviewDecision } from "../types.js";
 
 const findingSchema = z.object({
@@ -114,7 +115,7 @@ export async function deleteLocalReviewCache(pullNumber: number): Promise<void> 
 }
 
 function cachePath(pullNumber: number): string {
-  return path.join(process.cwd(), ".ghbot-cache", `pr-${pullNumber}.json`);
+  return path.join(cacheRootDirectory(), `pr-${pullNumber}.json`);
 }
 
 function isFileNotFound(error: unknown): boolean {

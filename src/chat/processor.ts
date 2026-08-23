@@ -18,6 +18,7 @@ import {
 } from "../repository/knowledge.js";
 import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
 import { listPullRequestFiles } from "../github/pulls.js";
+import { tempRootDirectory } from "../runtimePaths.js";
 
 const CHAT_MARKER_PREFIX = "<!-- ghbot-chat:v1";
 const MAX_REPLY_CHARS = 60_000;
@@ -310,7 +311,7 @@ function isNotFoundError(error: unknown): boolean {
 
 export async function createRepositorySnapshot(sourceWorktree: string): Promise<string> {
   const sourceRoot = await fs.realpath(sourceWorktree);
-  const tempRoot = path.join(process.cwd(), ".ghbot-tmp");
+  const tempRoot = tempRootDirectory();
   await fs.mkdir(tempRoot, { recursive: true });
   const snapshot = await fs.mkdtemp(path.join(tempRoot, "pr-chat-"));
 
