@@ -10,6 +10,7 @@ import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
 import { tempRootDirectory } from "../runtimePaths.js";
+import { redactSecrets } from "../security/secrets.js";
 import {
   loadRepositoryKnowledge,
   REPOSITORY_KNOWLEDGE_SCRATCH_PATH,
@@ -1005,10 +1006,12 @@ async function runCommand(
 }
 
 function commandFailureOutput(result: { stdout: string; stderr: string }): string {
-  return (
+  const raw =
     [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n").slice(0, 20_000) ||
-    "no output"
-  );
+    "no output";
+  // Command output may echo tokens from the environment or remote URLs; never
+  // let it reach prompts, comments, or logs unredacted (8.4).
+  return redactSecrets(raw);
 }
 
 function formatValidationResult(
