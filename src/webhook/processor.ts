@@ -6,6 +6,7 @@ import { logger } from "../logger.js";
 import { withRetry } from "../retry.js";
 import { compactFilesForReview } from "../review/prompt.js";
 import type { PullRequestFile } from "../types.js";
+import { listPullRequestFiles } from "../github/pulls.js";
 
 const WEBHOOK_CHAT_MARKER = "<!-- ghbot-webhook-chat:v1";
 const MAX_WEBHOOK_REPLY_CHARS = 60_000;
@@ -357,26 +358,6 @@ async function listIssueComments(
   }));
 }
 
-async function listPullRequestFiles(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  pullNumber: number
-): Promise<PullRequestFile[]> {
-  const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
-    owner,
-    repo,
-    pull_number: pullNumber,
-    per_page: 100
-  });
-  return files.map((file) => ({
-    filename: file.filename,
-    patch: file.patch,
-    status: file.status,
-    additions: file.additions,
-    deletions: file.deletions
-  }));
-}
 
 async function loadReadme(octokit: Octokit, owner: string, repo: string): Promise<string> {
   try {

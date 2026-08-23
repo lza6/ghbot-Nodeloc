@@ -4,6 +4,7 @@ import { requiredChecksAreGreen } from "../github/checks.js";
 import { postPermissionDeniedComment } from "../github/commandFeedback.js";
 import { formatBotDisplayName } from "../github/botIdentity.js";
 import { collectValidNewLines, toDiffPosition } from "../github/diff.js";
+import { listPullRequestFiles } from "../github/pulls.js";
 import { logger } from "../logger.js";
 import { withRetry } from "../retry.js";
 import type { PullRequestFile, PullRequestRef, ReviewDecision, ReviewMode } from "../types.js";
@@ -1103,27 +1104,6 @@ async function getLatestBotReviewOutcomeForHead(
   return null;
 }
 
-async function listPullRequestFiles(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  pullNumber: number
-): Promise<PullRequestFile[]> {
-  const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
-    owner,
-    repo,
-    pull_number: pullNumber,
-    per_page: 100
-  });
-
-  return files.map((file) => ({
-    filename: file.filename,
-    patch: file.patch,
-    status: file.status,
-    additions: file.additions,
-    deletions: file.deletions
-  }));
-}
 
 async function submitReview(
   octokit: Octokit,

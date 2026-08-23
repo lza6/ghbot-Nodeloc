@@ -17,6 +17,7 @@ import {
   writeKnowledgeScratch
 } from "../repository/knowledge.js";
 import { hasProtectedSegment, isProtectedBasename } from "../security/sanitization.js";
+import { listPullRequestFiles } from "../github/pulls.js";
 
 const CHAT_MARKER_PREFIX = "<!-- ghbot-chat:v1";
 const MAX_REPLY_CHARS = 60_000;
@@ -196,27 +197,6 @@ async function hasExistingReply(
   return comments.some((comment) => comment.body?.includes(marker));
 }
 
-async function listPullRequestFiles(
-  octokit: Octokit,
-  owner: string,
-  repo: string,
-  pullNumber: number
-): Promise<PullRequestFile[]> {
-  const files = await octokit.paginate(octokit.rest.pulls.listFiles, {
-    owner,
-    repo,
-    pull_number: pullNumber,
-    per_page: 100
-  });
-
-  return files.map((file) => ({
-    filename: file.filename,
-    patch: file.patch,
-    status: file.status,
-    additions: file.additions,
-    deletions: file.deletions
-  }));
-}
 
 export function chatReplyLanguageInstruction(commentBody: string): string {
   const language = /\p{Script=Han}/u.test(commentBody) ? "Chinese" : "English";
