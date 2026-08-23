@@ -16,6 +16,8 @@ export function formatReviewBody(
     formatReviewStateMarker(mode, disposition, decision.review.length, decision.change.length),
     `## Automated review`,
     "",
+    formatStatusBanner(disposition, decision),
+    "",
     `Mode: ${mode}`,
     ""
   ];
@@ -54,8 +56,8 @@ export function formatReviewBody(
     `Applied review policy: ${config.reviewPolicy}`,
     `Final status: ${formatDisposition(disposition)}`,
     "",
-    `Required changes: ${decision.change.length}`,
-    `Review notes: ${decision.review.length}`
+    `**Required changes: ${decision.change.length}**`,
+    `**Review notes: ${decision.review.length}**`
   );
 
   if (decision.change.length > 0 && !decision.result.shouldClosePullRequest) {
@@ -63,7 +65,12 @@ export function formatReviewBody(
   }
 
   if (unpostedFindings.length > 0) {
-    lines.push("", "Findings that could not be attached inline:");
+    lines.push(
+      "",
+      "<details>",
+      `<summary>Findings that could not be attached inline (${unpostedFindings.length})</summary>`,
+      ""
+    );
     for (const finding of unpostedFindings) {
       lines.push(
         "",
@@ -71,9 +78,23 @@ export function formatReviewBody(
         `  ${finding.body}`
       );
     }
+    lines.push("", "</details>");
   }
 
   return lines.join("\n");
+}
+
+function formatStatusBanner(disposition: ReviewDisposition, decision: ReviewDecision): string {
+  if (decision.result.shouldClosePullRequest) {
+    return "> 🚨 **Malicious code detected — this pull request will be closed.**";
+  }
+  if (disposition.blocksMerge) {
+    return "> ❌ **Changes requested** — blocking findings must be fixed before merge.";
+  }
+  if (disposition.requiresAdminApproval) {
+    return "> ⏸️ **Waiting for administrator approval** — review notes require an admin approval of this head commit.";
+  }
+  return "> ✅ **Safe to merge** under the configured review policy.";
 }
 
 export function formatFindingReviewBody(

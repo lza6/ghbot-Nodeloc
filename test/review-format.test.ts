@@ -42,6 +42,7 @@ test("clean pass body shows the approve summary and merge guidance", () => {
   assert.match(body, /Final status: safe to merge/);
   assert.match(body, /Model decision: safe to merge/);
   assert.match(body, /Applied review policy/);
+  assert.match(body, /✅ \*\*Safe to merge\*\*/);
 });
 
 test("blocked body lists unposted findings and recheck hint", () => {
@@ -56,13 +57,16 @@ test("blocked body lists unposted findings and recheck hint", () => {
     blockDisposition
   );
   assert.match(body, /Final status: changes requested/);
-  assert.match(body, /could not be attached inline/);
+  assert.match(body, /❌ \*\*Changes requested\*\*/);
+  assert.match(body, /<details>/);
+  assert.match(body, /could not be attached inline \(1\)/);
   assert.match(body, /\/recheck/);
 });
 
 test("admin approval body states the waiting disposition", () => {
   const body = formatReviewBody(decision(), [], mode, adminDisposition);
   assert.match(body, /waiting for repository administrator approval/);
+  assert.match(body, /⏸️ \*\*Waiting for administrator approval\*\*/);
 });
 
 test("finding bodies carry the state marker and finding count", () => {
