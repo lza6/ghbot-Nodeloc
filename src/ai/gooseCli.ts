@@ -426,7 +426,9 @@ async function runProcess(
     logger.info(
       {
         cmd: command,
-        args: redactProcessArgs(args, label),
+        args: redactProcessArgs(args, label, {
+          redactLastAsValidationCommand: label === "isolated repository validation"
+        }),
         timeoutMs
       },
       `Spawning ${label}.`
@@ -618,9 +620,13 @@ function redactPrompt(args: string[]): string[] {
   );
 }
 
-export function redactProcessArgs(args: string[], label: string): string[] {
+export function redactProcessArgs(
+  args: string[],
+  label: string,
+  options: { redactLastAsValidationCommand?: boolean } = {}
+): string[] {
   const redacted = redactPrompt(args);
-  if (label === "isolated repository validation" && redacted.length > 0) {
+  if (options.redactLastAsValidationCommand && redacted.length > 0) {
     const commandIndex = redacted.length - 1;
     redacted[commandIndex] = `[validation command: ${args[commandIndex]?.length ?? 0} chars]`;
   }

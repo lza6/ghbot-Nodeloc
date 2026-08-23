@@ -67,8 +67,13 @@ test("redactProcessArgs hides the goose prompt body", () => {
   assert.equal(redacted[0], "run");
 });
 
-test("redactProcessArgs hides the validation command", () => {
+test("redactProcessArgs hides the validation command via explicit sentinel", () => {
   const args = ["sh", "-lc", "bootstrap", "ghbot-validation", "npm test && cat secrets"];
-  const redacted = redactProcessArgs(args, "isolated repository validation");
+  const redacted = redactProcessArgs(args, "isolated repository validation", {
+    redactLastAsValidationCommand: true
+  });
   assert.equal(redacted.at(-1), "[validation command: 23 chars]");
+  // Without the sentinel the label alone must not trigger redaction (D-09).
+  const untouched = redactProcessArgs(args, "isolated repository validation");
+  assert.equal(untouched.at(-1), "npm test && cat secrets");
 });
