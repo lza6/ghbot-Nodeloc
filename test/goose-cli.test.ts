@@ -61,7 +61,9 @@ test("process logging redacts only prompts and trusted validation commands", () 
     "[goose prompt: 13 chars]"
   ]);
   assert.deepEqual(
-    redactProcessArgs(["run", "sh", "-lc", "npm ci && npm test"], "isolated repository validation"),
+    redactProcessArgs(["run", "sh", "-lc", "npm ci && npm test"], "isolated repository validation", {
+      redactLastAsValidationCommand: true
+    }),
     ["run", "sh", "-lc", "[validation command: 18 chars]"]
   );
 });
