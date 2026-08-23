@@ -14,6 +14,23 @@ export function formatPermissionDeniedMessage(
   ].join(" ");
 }
 
+export function formatCommandAckMessage(
+  commenterLogin: string,
+  actorName: string,
+  command: "/recheck" | "/conflict"
+): string {
+  if (command === "/recheck") {
+    return [
+      `${actorName} received \`/recheck\` requested by @${commenterLogin}.`,
+      "The full review is running now with the repository's current strictness settings; the result will be posted in this conversation when it completes."
+    ].join(" ");
+  }
+  return [
+    `${actorName} received \`/conflict\` requested by @${commenterLogin}.`,
+    "Conflict repair can take up to 45 minutes (editing, isolated validation, and a final safety confirmation). A follow-up comment will report the outcome, and nothing is pushed unless every guard passes."
+  ].join(" ");
+}
+
 export async function postPermissionDeniedComment(
   octokit: Octokit,
   params: {

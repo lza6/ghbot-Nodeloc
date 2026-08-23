@@ -1,7 +1,7 @@
 import type { Octokit } from "@octokit/rest";
 import { config } from "../config.js";
 import { requiredChecksAreGreen } from "../github/checks.js";
-import { postPermissionDeniedComment } from "../github/commandFeedback.js";
+import { postPermissionDeniedComment, formatCommandAckMessage } from "../github/commandFeedback.js";
 import { formatBotDisplayName } from "../github/botIdentity.js";
 import { collectValidNewLines, toDiffPosition } from "../github/diff.js";
 import { listPullRequestFiles } from "../github/pulls.js";
@@ -641,7 +641,7 @@ export async function processRecheckComment(
       owner: params.owner,
       repo: params.repo,
       issue_number: params.pullNumber,
-      body: `Recheck requested by @${params.commenterLogin}. Re-running the review with the repository's current strictness settings.`
+      body: formatCommandAckMessage(params.commenterLogin, conflictAutomationName(), "/recheck")
     });
   });
 
