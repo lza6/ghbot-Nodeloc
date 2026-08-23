@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatValidationLogOutput } from "../src/review/conflictResolver.js";
-import { redactSecrets } from "../src/security/secrets.js";
+import {
+  formatValidationLogOutput,
+  formatValidationResult
+} from "../src/review/conflictResolver.js";
 
 test("validation log output keeps the useful tail within bounds", () => {
   const longOutput = "x".repeat(30_000) + "\nfinal error line";
@@ -16,9 +18,12 @@ test("validation log output strips ANSI escapes and normalizes newlines", () => 
   assert.equal(formatted, "error\nline2");
 });
 
-test("redaction is applied to command failure text before exposure", () => {
-  // The conflict resolver wraps commandFailureOutput with redactSecrets; this
-  // asserts the composition contract at the module boundary.
-  const leaked = "push failed: https://user:ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456@github.com/x";
-  assert.equal(redactSecrets(leaked).includes("ghp_"), false);
+test("validation result redacts credentials before prompt or log exposure", () => {
+  const formatted = formatValidationResult("npm test", {
+    code: 1,
+    stdout: "",
+    stderr: "fatal: https://user:ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456@github.com/x"
+  });
+  assert.equal(formatted.includes("ghp_"), false);
+  assert.match(formatted, /REDACTED|Exit code: 1/);
 });

@@ -8,8 +8,10 @@ import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { startOneRunApiProxy } from "./apiProxy.js";
 import { tempRootDirectory } from "../runtimePaths.js";
+import { redactSecrets } from "../security/secrets.js";
 
 const GOOSE_RUN_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_PROCESS_OUTPUT_CHARS = 1_000_000;
 const GOOSE_DOCKER_IMAGE = "node:24-bookworm";
 const GOOSE_DOCKER_VERSION = "v1.46.0";
 const GOOSE_CONTAINER_PATH = "/usr/local/bin/goose";
@@ -21,7 +23,7 @@ const GOOSE_CONTAINER_BOOTSTRAP = [
   'mkdir -p "$HOME"',
   "git config --global --add safe.directory /workspace",
   "if ! command -v goose >/dev/null 2>&1; then",
-  "  curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh -o /tmp/download_cli.sh",
+  `  curl -fsSL https://github.com/aaif-goose/goose/releases/download/${GOOSE_DOCKER_VERSION}/download_cli.sh -o /tmp/download_cli.sh`,
   `  if ! GOOSE_VERSION="${GOOSE_DOCKER_VERSION}" GOOSE_BIN_DIR=/tmp/goose-bin CONFIGURE=false bash /tmp/download_cli.sh >/tmp/goose-install.log 2>&1; then`,
   "    cat /tmp/goose-install.log >&2",
   "    exit 1",
@@ -57,12 +59,12 @@ export async function runGoosePrompt(
     throw new Error("GOOSE_API_KEY is required when running a goose prompt.");
   }
 
-  const tempRoot = tempRootDirectory();
-  await fs.mkdir(tempRoot, { recursive: true });
-  const tempDir = await fs.mkdtemp(path.join(tempRoot, "goose-"));
   const workingDirectory = options.workingDirectory
     ? await fs.realpath(options.workingDirectory)
     : process.cwd();
+  const tempRoot = tempRootDirectory();
+  await fs.mkdir(tempRoot, { recursive: true });
+  const tempDir = await fs.mkdtemp(path.join(tempRoot, "goose-"));
   const args = [
     "run",
     "--no-session",
@@ -87,6 +89,7 @@ export async function runGoosePrompt(
     "Running goose prompt."
   );
 
+  let primaryError: unknown;
   try {
     const stdout = await runGoose(
       args,
@@ -95,8 +98,11 @@ export async function runGoosePrompt(
       options.timeoutMs
     );
     return extractGooseFinalText(stdout);
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
+    await removeDirectoryBestEffort(tempDir, "goose prompt temp directory", primaryError);
   }
 }
 
@@ -128,6 +134,7 @@ export async function runGooseAgent(
     prompt
   });
 
+  let primaryError: unknown;
   try {
     const stdout = await runProcess(
       "docker",
@@ -138,16 +145,21 @@ export async function runGooseAgent(
       options.timeoutMs
     );
     return extractGooseFinalText(stdout);
+  } catch (error) {
+    primaryError = error;
+    throw error;
   } finally {
-    try {
-      await removeDockerContainer(containerName, realWorkingDirectory);
-    } finally {
-      try {
-        await restoreAgentWorkspacePermissions(realWorkingDirectory);
-      } finally {
-        await proxy.close();
-      }
-    }
+    await removeDockerContainer(containerName, realWorkingDirectory);
+    await restoreAgentWorkspacePermissions(realWorkingDirectory).catch((error: unknown) => {
+      logger.warn(
+        { error, workingDirectory: realWorkingDirectory },
+        "Agent workspace cleanup failed."
+      );
+    });
+    await proxy.close().catch((error: unknown) => {
+      logger.warn({ error }, "One-run Goose API proxy cleanup failed.");
+    });
+    void primaryError;
   }
 }
 
@@ -442,6 +454,15 @@ async function runProcess(
     let stdout = "";
     let stderr = "";
     let finished = false;
+    let outputOverflowed = false;
+    const appendOutput = (current: string, chunk: string): string => {
+      const next = current + chunk;
+      if (next.length <= MAX_PROCESS_OUTPUT_CHARS) {
+        return next;
+      }
+      outputOverflowed = true;
+      return next.slice(-MAX_PROCESS_OUTPUT_CHARS);
+    };
     const timeout = setTimeout(() => {
       if (finished) {
         return;
@@ -451,17 +472,48 @@ async function runProcess(
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
       reject(
-        Object.assign(new Error(`${label} timed out after ${timeoutMs}ms.`), { stdout, stderr })
+        Object.assign(new Error(`${label} timed out after ${timeoutMs}ms.`), {
+          stdout,
+          stderr
+        })
       );
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
+      stdout = appendOutput(stdout, chunk.toString());
+      if (outputOverflowed && !finished) {
+        finished = true;
+        clearTimeout(timeout);
+        child.kill("SIGTERM");
+        reject(
+          Object.assign(
+            new Error(`${label} exceeded the ${MAX_PROCESS_OUTPUT_CHARS}-character output limit.`),
+            {
+              stdout,
+              stderr
+            }
+          )
+        );
+      }
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
       const text = chunk.toString();
-      stderr += text;
-      streamStderr(text, label);
+      stderr = appendOutput(stderr, text);
+      streamStderr(text.slice(-MAX_PROCESS_OUTPUT_CHARS), label);
+      if (outputOverflowed && !finished) {
+        finished = true;
+        clearTimeout(timeout);
+        child.kill("SIGTERM");
+        reject(
+          Object.assign(
+            new Error(`${label} exceeded the ${MAX_PROCESS_OUTPUT_CHARS}-character output limit.`),
+            {
+              stdout,
+              stderr
+            }
+          )
+        );
+      }
     });
     child.on("error", (error) => {
       if (finished) {
@@ -513,9 +565,40 @@ async function removeDockerContainer(
       env: buildChildEnv({}),
       stdio: "ignore"
     });
-    child.on("error", () => resolve());
-    child.on("close", () => resolve());
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      logger.warn({ containerName }, "Docker container cleanup timed out; continuing.");
+      resolve();
+    }, 10_000);
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      logger.warn({ error, containerName }, "Docker container cleanup failed; continuing.");
+      resolve();
+    });
+    child.on("close", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
   });
+}
+
+async function removeDirectoryBestEffort(
+  directory: string,
+  label: string,
+  primaryError: unknown
+): Promise<void> {
+  try {
+    await fs.rm(directory, { recursive: true, force: true });
+  } catch (error) {
+    logger.warn(
+      {
+        error,
+        directory,
+        primaryError: primaryError instanceof Error ? primaryError.message : undefined
+      },
+      `${label} cleanup failed; preserving the primary operation result.`
+    );
+  }
 }
 
 function buildChildEnv(extraEnv: Record<string, string>): NodeJS.ProcessEnv {
@@ -634,9 +717,10 @@ export function redactProcessArgs(
 }
 
 function streamStderr(text: string, label: string): void {
-  for (const line of text.replace(/\r\n/g, "\n").split("\n")) {
+  const redacted = redactSecrets(text);
+  for (const line of redacted.replace(/\r\n/g, "\n").split("\n")) {
     if (line.trim()) {
-      process.stderr.write(`[${label} stderr] ${line}\n`);
+      logger.warn({ label }, `[${label} stderr] ${line}`);
     }
   }
 }

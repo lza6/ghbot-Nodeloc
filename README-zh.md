@@ -31,6 +31,7 @@ goose 的审核结果固定包含四个顶层字段：
 - `REVIEW_BRANCHES`：需要审核的 PR 目标分支 glob，以逗号分隔；留空表示全部分支。例如 `main,develop,release/**`。
 - `REVIEW_STRICTNESS`：默认 `normal`；设为 `strict` 才会全面严格检查。普通模式不吹毛求疵，只报告明确的运行、构建、测试、安全、数据丢失或重要用户体验回归。
 - `MAX_PATCH_CHARS`：单次发送给模型的最大 patch 字符数，默认 `120000`。
+- `GHBOT_RUNTIME_DIR`：可选的可写 runtime 根目录，用于 `.ghbot-tmp`、`.ghbot-cache` 和仓库知识文件；留空时使用进程工作目录。
 
 `REVIEW_BRANCHES` 匹配 PR 的 base branch。`*` 不跨越 `/`，`**` 可以跨越 `/`。workflow 文件需要存在于仓库默认分支，但这不表示只能审核指向默认分支的 PR；例如 workflow 位于 `main` 时，仍可审核目标为 `develop` 或 `release/1.x` 的 PR。
 
@@ -128,7 +129,7 @@ Action 模式仍然是默认模式，不需要 Webhook 服务也可以完整使�
 
 只有在同时运行长期 Node 进程或本仓库提供的 `Dockerfile.webhook` 时才启用 Webhook。它接收 GitHub App 的 webhook 事件，处理 Issue/PR conversation comment、review comment 和提交的 review 中对 `@bot` 的提问。适合组织只安装一次 App、由多个仓库共用一个服务端点的场景。App 必须安装到每个目标仓库，或者组织安装时选择包含这些仓库；未被该 installation 授权的仓库无法访问。
 
-GitHub App 的 Webhook URL 配置为 `https://你的域名/webhooks/github`，`WEBHOOK_SECRET` 使用同一个密钥，并订阅 `Issue comments`、`Pull request review comments`、`Pull request reviews`。App 需要 `Metadata: read`、`Issues: read and write`、`Pull requests: read and write`。服务会使用每个 payload 中的 `installation.id` 换取对应的短期 installation token，不能用一个固定 installation ID 代替所有仓库。
+GitHub App 的 Webhook URL 配置为 `https://你的域名/webhooks/github`，`WEBHOOK_SECRET` 必须使用独立的长随机 HMAC 密钥，并在 GitHub App Webhook 设置和服务环境中配置相同密钥；不要把公开 URL 当作密钥。并订阅 `Issue comments`、`Pull request review comments`、`Pull request reviews`。App 需要 `Metadata: read`、`Issues: read and write`、`Pull requests: read and write`。服务会使用每个 payload 中的 `installation.id` 换取对应的短期 installation token，不能用一个固定 installation ID 代替所有仓库。
 
 服务环境变量如下：
 
@@ -138,7 +139,20 @@ GitHub App 的 Webhook URL 配置为 `https://你的域名/webhooks/github`，`W
 - `WEBHOOK_CHAT_PERMISSION`：`read`（默认）、`write` 或 `anyone`。对于组织拥有的仓库，`read` 还会允许组织成员直接提问，不要求把每个成员单独添加为仓库协作者；个人仓库和组织外用户仍走仓库协作者权限检查。`write` 只允许 write、maintain、admin；`anyone` 跳过评论者权限检查，但仍只能访问 App 已安装的仓库。建议给 App 配置组织级 `Members: read`，这样才能验证私有组织成员身份。
 - `WEBHOOK_QUEUE_CONCURRENCY` 和 `WEBHOOK_QUEUE_LIMIT` 用于限制后台处理量和内存。
 
-可以用 `npm run build && npm run webhook` 启动，也可以构建 `docker build -f Dockerfile.webhook -t ghbot-webhook .` 后运行，并传入 App 凭证、Webhook 密钥和 Goose 配置。`GET /healthz` 可作为健康检查。服务会先返回 `202` 再后台调用 Goose；请求使用 HMAC 验签，按 `X-GitHub-Delivery` 去重，后台失败的 delivery 仍可被 GitHub 重试。
+可以用 `npm run build && npm run webhook` 启动，也可以构建并运行 Docker：
+
+```bash
+docker build -f Dockerfile.webhook -t ghbot-webhook .
+docker run --rm -p 3000:3000 \\
+  -e WEBHOOK_ENABLED=true \\
+  -e WEBHOOK_SECRET='替换为长随机密钥' \\
+  -e GH_APP_ID='123456' \\
+  -e GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \\
+  -e GOOSE_API_KEY="$GOOSE_API_KEY" \\
+  ghbot-webhook
+```
+
+TLS 应由反向代理或托管 ingress 终止；Node 服务监听 `PORT`（默认 `3000`）。`GET /healthz` 可作为健康检查，`GET /metrics` 提供 Prometheus 文本指标。服务会先返回 `202` 再后台调用 Goose，因为模型耗时可能超过 GitHub webhook 超时。后台失败只会在进程内重试一次；进程在 `202` 之后崩溃时 GitHub **不会**重投。需要可靠执行 `/recheck`、`/conflict` 和带工具的对话时请用 Action 模式。Webhook 对话是尽力而为。请求使用 HMAC 验签，并按 `X-GitHub-Delivery` 去重。
 
 Webhook 对话刻意保持只读：Goose 只能收到仓库元数据、README、Issue/PR 内容、有限 diff 和近期讨论，不会获得仓库工具或凭证。因此它不能改代码、执行命令、push、运行 `/recheck` 或 `/conflict`；这些操作请继续使用 Action 模式。回复语言跟随最新一条评论，也不会暴露 provider 或 GitHub 密钥。不设置 `WEBHOOK_ENABLED` 就仍是普通的 Action-only 部署。
 
@@ -154,9 +168,10 @@ Webhook 对话刻意保持只读：Goose 只能收到仓库元数据、README、
 
 ## goose 配置
 
-必须添加 Actions Secret：
+必须添加 Actions Secret（运行审核或 Goose 操作时至少配置一个）：
 
-- `GOOSE_API_KEY`
+- `GOOSE_API_KEY`（首选）
+- `OPENCODE_API_KEY`（迁移兼容别名）
 
 相关 Repository Variables：
 
@@ -253,7 +268,7 @@ npm run format:check # Prettier 格式检查
 npm test             # node:test 测试套件
 ```
 
-可选的 webhook 服务提供 `GET /healthz` 与 `GET /metrics`（Prometheus 文本格式）用于探活与监控。
+可选的 webhook 服务提供 `GET /healthz` 与 `GET /metrics`（Prometheus 文本格式）用于探活与监控。生产硬化变更说明与测验见 [docs/reports/ghbot-production-hardening.html](docs/reports/ghbot-production-hardening.html)。
 
 ## 本地开发
 

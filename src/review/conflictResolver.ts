@@ -42,6 +42,8 @@ const CONFLICT_VALIDATION_REPAIR_AGENT_TIMEOUT_MS = 10 * 60 * 1000;
 const CONFLICT_VALIDATION_TIMEOUT_MS = 7 * 60 * 1000;
 const CONFLICT_CONFIRMATION_TIMEOUT_MS = 5 * 60 * 1000;
 const VALIDATION_LOG_OUTPUT_LIMIT = 12_000;
+const GIT_COMMAND_TIMEOUT_MS = 2 * 60 * 1000;
+const activeConflictLocks = new Set<string>();
 
 type SnapshotFile = {
   hash: string;
@@ -64,6 +66,16 @@ export function canAutoResolveConflicts(input: ConflictResolutionEligibility): b
     (input.headRepository === input.baseRepository || input.maintainerCanModify) &&
     input.currentHeadSha === input.expectedHeadSha
   );
+}
+
+export async function acquireConflictLock(key: string): Promise<() => void> {
+  if (activeConflictLocks.has(key)) {
+    throw new Error("Another conflict-resolution run is already active for this pull request.");
+  }
+  activeConflictLocks.add(key);
+  return () => {
+    activeConflictLocks.delete(key);
+  };
 }
 
 export async function resolvePullRequestConflicts(
@@ -101,15 +113,28 @@ export async function resolvePullRequestConflicts(
   }
 
   const worktree = await fs.realpath(params.worktree);
+  const releaseConflictLock = await acquireConflictLock(`${baseRepository}#${params.pullNumber}`);
   const tempRoot = tempRootDirectory();
-  await fs.mkdir(tempRoot, { recursive: true });
-  const askPassDirectory = await fs.mkdtemp(path.join(tempRoot, "git-auth-"));
+  let askPassDirectory: string;
+  try {
+    await fs.mkdir(tempRoot, { recursive: true });
+    askPassDirectory = await fs.mkdtemp(path.join(tempRoot, "git-auth-"));
+  } catch (error) {
+    releaseConflictLock();
+    throw error;
+  }
   const askPassPath = path.join(askPassDirectory, "askpass.sh");
-  await fs.writeFile(
-    askPassPath,
-    '#!/bin/sh\ncase "$1" in *Username*) printf "%s\\n" "x-access-token" ;; *) printf "%s\\n" "$GHBOT_GIT_TOKEN" ;; esac\n',
-    { mode: 0o700 }
-  );
+  try {
+    await fs.writeFile(
+      askPassPath,
+      '#!/bin/sh\ncase "$1" in *Username*) printf "%s\\n" "x-access-token" ;; *) printf "%s\\n" "$GHBOT_GIT_TOKEN" ;; esac\n',
+      { mode: 0o700 }
+    );
+  } catch (error) {
+    await fs.rm(askPassDirectory, { recursive: true, force: true }).catch(() => undefined);
+    releaseConflictLock();
+    throw error;
+  }
   const gitEnv = {
     GIT_ASKPASS: askPassPath,
     GIT_TERMINAL_PROMPT: "0",
@@ -467,13 +492,21 @@ export async function resolvePullRequestConflicts(
     );
     return true;
   } catch (error) {
+    await runCommand("git", ["reset", "--hard", params.expectedHeadSha], worktree, gitEnv).catch(
+      () => undefined
+    );
     await runCommand("git", ["merge", "--abort"], worktree, gitEnv).catch(() => undefined);
     throw error;
   } finally {
     if (snapshot) {
-      await fs.rm(snapshot, { recursive: true, force: true });
+      await fs.rm(snapshot, { recursive: true, force: true }).catch((error: unknown) => {
+        logger.warn({ error, snapshot }, "Conflict snapshot cleanup failed; continuing.");
+      });
     }
-    await fs.rm(askPassDirectory, { recursive: true, force: true });
+    await fs.rm(askPassDirectory, { recursive: true, force: true }).catch((error: unknown) => {
+      logger.warn({ error, askPassDirectory }, "Git askpass cleanup failed; continuing.");
+    });
+    releaseConflictLock();
   }
 }
 
@@ -1014,13 +1047,11 @@ function commandFailureOutput(result: { stdout: string; stderr: string }): strin
   return redactSecrets(raw);
 }
 
-function formatValidationResult(
+export function formatValidationResult(
   command: string,
   result: { code: number; stdout: string; stderr: string }
 ): string {
-  const output =
-    [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n").slice(0, 20_000) ||
-    "no output";
+  const output = commandFailureOutput(result);
   return [`Command: ${command}`, `Exit code: ${result.code}`, "Output:", output].join("\n");
 }
 
@@ -1128,7 +1159,8 @@ async function runCommandAllowFailure(
   command: string,
   args: string[],
   cwd: string,
-  extraEnv: Record<string, string>
+  extraEnv: Record<string, string>,
+  timeoutMs = GIT_COMMAND_TIMEOUT_MS
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -1138,15 +1170,50 @@ async function runCommandAllowFailure(
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child.kill("SIGTERM");
+      setTimeout(() => child.kill("SIGKILL"), 5_000).unref();
+      reject(
+        Object.assign(new Error(`${command} timed out after ${timeoutMs}ms.`), {
+          stdout,
+          stderr,
+          code: null
+        })
+      );
+    }, timeoutMs);
     child.stdout.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
+      stdout = appendBoundedOutput(stdout, chunk.toString());
     });
     child.stderr.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
+      stderr = appendBoundedOutput(stderr, chunk.toString());
     });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ code: code ?? 1, stdout, stderr });
+    });
   });
+}
+
+function appendBoundedOutput(current: string, chunk: string): string {
+  const next = current + chunk;
+  return next.length <= 1_000_000 ? next : next.slice(-1_000_000);
 }
 
 function buildCommandEnvironment(extraEnv: Record<string, string>): NodeJS.ProcessEnv {

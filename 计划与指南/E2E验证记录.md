@@ -27,3 +27,8 @@ ghbot_webhook_deliveries_total{result="duplicate"} 1
 ## 结论
 
 webhook 服务从启动 → 鉴权 → 去重 → 可观测性的完整链路在真实 HTTP 层验证通过。
+
+## 回归（2026-08-23，PORT=3011，生产 dist）
+
+同一矩阵在硬化改动后复测：healthz 200、合法 HMAC 202、坏签名 401、重复 delivery duplicate、metrics 三项计数正确。
+

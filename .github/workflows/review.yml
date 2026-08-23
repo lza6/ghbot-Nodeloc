@@ -59,7 +59,7 @@ jobs:
       reviewer_login: ${{ github.event.review.user.login || '' }}
       review_state: ${{ github.event.review.state || '' }}
       review_commit_id: ${{ github.event.review.commit_id || '' }}
-      bot_name: github-actions[bot]
+      bot_name: ${{ vars.BOT_NAME || 'github-actions[bot]' }}
       goose_base_url: ${{ vars.GOOSE_BASE_URL || vars.OPENCODE_BASE_URL || 'https://api.openai.com/v1' }}
       goose_model: ${{ vars.GOOSE_MODEL || vars.OPENCODE_MODEL || 'gpt-5.4' }}
       goose_thinking_effort: ${{ vars.GOOSE_THINKING_EFFORT || vars.OPENCODE_REASONING_EFFORT || 'high' }}
@@ -86,7 +86,8 @@ jobs:
       merge_method: ${{ vars.MERGE_METHOD || 'squash' }}
       require_checks: ${{ vars.REQUIRE_CHECKS || 'true' }}
       max_patch_chars: ${{ vars.MAX_PATCH_CHARS || '120000' }}
-      log_level: info
+      runtime_directory: ${{ vars.GHBOT_RUNTIME_DIR || '' }}
+      log_level: ${{ vars.LOG_LEVEL || 'info' }}
   review-schedule-recheck:
     if: github.event_name == 'schedule'
     uses: ./.github/workflows/review-reusable.yml
@@ -105,7 +106,7 @@ jobs:
       repository_name: ${{ github.event.repository.name }}
       repository_id: ${{ github.repository_id }}
       pull_number: "1"
-      bot_name: github-actions[bot]
+      bot_name: ${{ vars.BOT_NAME || 'github-actions[bot]' }}
       goose_base_url: ${{ vars.GOOSE_BASE_URL || vars.OPENCODE_BASE_URL || 'https://api.openai.com/v1' }}
       goose_model: ${{ vars.GOOSE_MODEL || vars.OPENCODE_MODEL || 'gpt-5.4' }}
       goose_thinking_effort: ${{ vars.GOOSE_THINKING_EFFORT || vars.OPENCODE_REASONING_EFFORT || 'high' }}
@@ -132,5 +133,6 @@ jobs:
       merge_method: ${{ vars.MERGE_METHOD || 'squash' }}
       require_checks: ${{ vars.REQUIRE_CHECKS || 'true' }}
       max_patch_chars: ${{ vars.MAX_PATCH_CHARS || '120000' }}
-      log_level: info
+      runtime_directory: ${{ vars.GHBOT_RUNTIME_DIR || '' }}
+      log_level: ${{ vars.LOG_LEVEL || 'info' }}
       run_schedule_recheck: "true"

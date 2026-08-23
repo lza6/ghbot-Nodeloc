@@ -29,6 +29,7 @@ Use repository Actions variables to customize a caller repository:
 - `REVIEW_BRANCHES`: comma-separated base-branch globs. Empty reviews all target branches. Example: `main,develop,release/**`.
 - `REVIEW_STRICTNESS`: `normal` by default, or `strict` for a thorough repository-policy review. Normal mode avoids nitpicks and reports only clear runtime, build, test, security, data-loss, or important user-facing regressions.
 - `MAX_PATCH_CHARS`: maximum total patch text sent for review; default `120000`.
+- `GHBOT_RUNTIME_DIR`: optional writable runtime root for `.ghbot-tmp`, `.ghbot-cache`, and repository knowledge files; defaults to the process working directory.
 
 `REVIEW_BRANCHES` matches the pull request's target (base) branch. `*` does not cross `/`; `**` does. The workflow file must be present on the repository's default branch for `pull_request_target`, but that does not limit reviews to PRs targeting the default branch. A workflow installed on `main` can review PRs targeting `develop` or release branches. The bot fetches each PR and its diff by PR number and never executes code from the PR head.
 
@@ -114,7 +115,7 @@ Action mode remains the default and is complete without a webhook service. `WEBH
 
 Enable webhook mode only when you also run a long-lived Node process or the included `Dockerfile.webhook`. It receives GitHub App webhook events and answers `@bot` mentions in Issue/PR conversation comments, review comments, and submitted reviews. It is useful when the App is installed once for an organization and you want those repositories to share one endpoint. The App must be installed on each repository (or the organization selection must include it); a webhook cannot access repositories where the installation has no access.
 
-Configure the GitHub App webhook URL as `https://your-host/webhooks/github`, use the same value for `WEBHOOK_SECRET`, and subscribe to `Issue comments`, `Pull request review comments`, and `Pull request reviews`. The App needs `Metadata: read`, `Issues: read and write`, and `Pull requests: read and write`. The endpoint exchanges each payload's `installation.id` for the correct short-lived installation token, so one fixed installation ID must not be used for all repositories.
+Configure the GitHub App webhook URL as `https://your-host/webhooks/github`, and configure `WEBHOOK_SECRET` as a separate long random HMAC secret in both GitHub App webhook settings and the service environment. Never reuse the public URL as the secret. Subscribe to `Issue comments`, `Pull request review comments`, and `Pull request reviews`. The App needs `Metadata: read`, `Issues: read and write`, and `Pull requests: read and write`. The endpoint exchanges each payload's `installation.id` for the correct short-lived installation token, so one fixed installation ID must not be used for all repositories.
 
 Set these service environment variables:
 
@@ -124,7 +125,20 @@ Set these service environment variables:
 - `WEBHOOK_CHAT_PERMISSION`: `read` (default), `write`, or `anyone`. On organization-owned repositories, `read` also allows organization members without adding each member as a repository collaborator; personal repositories and non-members continue through the repository collaborator check. `write` allows write, maintain, or admin; `anyone` skips the commenter permission check but still only works in App-installed repositories. The App should have organization-level `Members: read` permission so private organization membership can be verified.
 - `WEBHOOK_QUEUE_CONCURRENCY` and `WEBHOOK_QUEUE_LIMIT` bound background work and memory.
 
-Start it with `npm run build && npm run webhook`, or build `docker build -f Dockerfile.webhook -t ghbot-webhook .` and run it with the App credentials, webhook secret, and Goose variables. `GET /healthz` is available for service probes. GitHub receives `202` before Goose runs; deliveries are HMAC-verified, deduplicated by `X-GitHub-Delivery`, and failed background deliveries remain retryable.
+Start it with `npm run build && npm run webhook`, or build and run the Docker image:
+
+```bash
+docker build -f Dockerfile.webhook -t ghbot-webhook .
+docker run --rm -p 3000:3000 \\
+  -e WEBHOOK_ENABLED=true \\
+  -e WEBHOOK_SECRET='replace-with-a-long-random-secret' \\
+  -e GH_APP_ID='123456' \\
+  -e GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \\
+  -e GOOSE_API_KEY="$GOOSE_API_KEY" \\
+  ghbot-webhook
+```
+
+Keep TLS termination in a reverse proxy or managed ingress; the Node service listens on `PORT` (default `3000`). `GET /healthz` is available for service probes and `GET /metrics` exposes Prometheus text metrics. GitHub receives `202` before Goose runs because a review-quality model call can exceed GitHub's webhook timeout. Failed background work is retried in-process once; a process crash after `202` is **not** redelivered by GitHub. Use Action mode for durable `/recheck`, `/conflict`, and tool-enabled chat. Webhook chat is best-effort. Deliveries are HMAC-verified and deduplicated by `X-GitHub-Delivery`.
 
 Webhook chat is deliberately read-only: Goose receives repository metadata, README, Issue/PR text, bounded diffs, and recent discussion, but no repository tools or credentials. It cannot edit code, run commands, push commits, run `/recheck`, or run `/conflict`; use Action mode for those operations. Replies follow the language of the latest comment and include no provider or GitHub secrets. Leaving `WEBHOOK_ENABLED` unset preserves the normal Action-only deployment.
 
@@ -140,9 +154,10 @@ After applying the proposed files, ghbot verifies there are no unmerged paths an
 
 ## goose configuration
 
-Required secret:
+Required provider secret (one of these aliases must be supplied when a review or Goose operation runs):
 
-- `GOOSE_API_KEY`
+- `GOOSE_API_KEY` (preferred)
+- `OPENCODE_API_KEY` (migration fallback alias)
 
 Repository variables:
 
@@ -243,7 +258,7 @@ npm run format:check # Prettier formatting
 npm test             # node:test suite
 ```
 
-The optional webhook service exposes `GET /healthz` and `GET /metrics` (Prometheus text format) for probes and dashboards.
+The optional webhook service exposes `GET /healthz` and `GET /metrics` (Prometheus text format) for probes and dashboards. The production-hardening change ledger and quiz live at [docs/reports/ghbot-production-hardening.html](docs/reports/ghbot-production-hardening.html).
 
 ## Local development
 

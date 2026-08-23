@@ -5,6 +5,9 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 import { logger } from "../logger.js";
 
+const PROXY_REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_PROXY_BODY_BYTES = 20 * 1024 * 1024;
+
 export async function startOneRunApiProxy(
   upstreamBaseUrl: string,
   realApiKey: string
@@ -14,6 +17,19 @@ export async function startOneRunApiProxy(
   const sockets = new Set<Socket>();
   const upstreamRequests = new Set<AbortController>();
   const server = http.createServer(async (request, response) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+      request.destroy(new Error("goose proxy request timed out."));
+    }, PROXY_REQUEST_TIMEOUT_MS);
+    const abortOnClose = () => {
+      if (!response.writableEnded) {
+        controller.abort();
+      }
+    };
+    request.once("aborted", abortOnClose);
+    response.once("close", abortOnClose);
+
     try {
       if (
         request.method !== "POST" ||
@@ -25,24 +41,26 @@ export async function startOneRunApiProxy(
         return;
       }
 
-      const body = await readRequestBody(request, 20 * 1024 * 1024);
-      const controller = new AbortController();
-      upstreamRequests.add(controller);
-      let upstreamResponse: Response;
-      try {
-        upstreamResponse = await fetch(upstream, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${realApiKey}`,
-            "content-type": request.headers["content-type"] ?? "application/json",
-            accept: request.headers.accept ?? "*/*"
-          },
-          body: body.toString("utf8"),
-          signal: controller.signal
-        });
-      } finally {
-        upstreamRequests.delete(controller);
+      const contentLength = Number(request.headers["content-length"]);
+      if (Number.isFinite(contentLength) && contentLength > MAX_PROXY_BODY_BYTES) {
+        response.writeHead(413, { "content-type": "application/json" });
+        response.end('{"error":{"message":"Request body is too large"}}');
+        request.destroy();
+        return;
       }
+
+      const body = await readRequestBody(request, MAX_PROXY_BODY_BYTES, controller);
+      upstreamRequests.add(controller);
+      const upstreamResponse = await fetch(upstream, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${realApiKey}`,
+          "content-type": request.headers["content-type"] ?? "application/json",
+          accept: request.headers.accept ?? "*/*"
+        },
+        body: body.toString("utf8"),
+        signal: controller.signal
+      });
 
       response.writeHead(upstreamResponse.status, copyResponseHeaders(upstreamResponse.headers));
       if (!upstreamResponse.body) {
@@ -50,15 +68,26 @@ export async function startOneRunApiProxy(
         return;
       }
 
-      Readable.fromWeb(upstreamResponse.body as WebReadableStream)
-        .on("error", (error) => response.destroy(error as Error))
-        .pipe(response);
+      await new Promise<void>((resolve, reject) => {
+        const stream = Readable.fromWeb(upstreamResponse.body as WebReadableStream);
+        stream.once("error", reject);
+        response.once("finish", resolve);
+        response.once("close", resolve);
+        stream.pipe(response);
+      });
     } catch (error) {
       logger.error({ error }, "goose API proxy request failed.");
       if (!response.headersSent) {
         response.writeHead(502, { "content-type": "application/json" });
       }
-      response.end('{"error":{"message":"goose proxy request failed"}}');
+      if (!response.writableEnded) {
+        response.end('{"error":{"message":"goose proxy request failed"}}');
+      }
+    } finally {
+      clearTimeout(timeout);
+      request.off("aborted", abortOnClose);
+      response.off("close", abortOnClose);
+      upstreamRequests.delete(controller);
     }
   });
   server.on("connection", (socket) => {
@@ -83,8 +112,8 @@ export async function startOneRunApiProxy(
     port: address.port,
     token,
     close: async () => {
-      for (const controller of upstreamRequests) {
-        controller.abort();
+      for (const requestController of upstreamRequests) {
+        requestController.abort();
       }
       for (const socket of sockets) {
         socket.destroy();
@@ -103,10 +132,17 @@ function hasMatchingBearerToken(value: string | undefined, expectedToken: string
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-async function readRequestBody(request: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+async function readRequestBody(
+  request: http.IncomingMessage,
+  maxBytes: number,
+  controller: AbortController
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
+    if (controller.signal.aborted) {
+      throw new Error("goose proxy request was aborted.");
+    }
     const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += value.length;
     if (size > maxBytes) {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { config } from "../config.js";
 import { createGitHubCredentials } from "../github/client.js";
-import { logger } from "../logger.js";
+import { createEventLogger, logger } from "../logger.js";
 import { withRetry } from "../retry.js";
 import { processPullRequestChat } from "../chat/processor.js";
 import { processIssueTriage, processPullRequestTriage } from "../triage/processor.js";
@@ -96,6 +96,12 @@ async function main(): Promise<void> {
   }
 
   const pullNumberForCache = getPullNumberForCache(eventName, payload);
+  const eventLogger = createEventLogger({
+    eventName,
+    owner: repository.owner.login,
+    repo: repository.name,
+    pullNumber: pullNumberForCache
+  });
   const persistentCache = {
     repositoryId: process.env.GHBOT_REPOSITORY_ID || String(repository.id ?? ""),
     owner: repository.owner.login,
@@ -131,7 +137,7 @@ async function main(): Promise<void> {
   });
   const octokit = github.octokit;
 
-  logger.info({ eventName }, "Handling GitHub Actions review event.");
+  eventLogger.info("Handling GitHub Actions review event.");
 
   let eventFailed = false;
   try {
@@ -301,6 +307,15 @@ async function main(): Promise<void> {
           );
         }
       });
+      const rejectedResults = results.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (rejectedResults.length > 0) {
+        throw new AggregateError(
+          rejectedResults.map((result) => result.reason),
+          "One or more issue comment handlers failed; GitHub Actions should retry this delivery."
+        );
+      }
       return;
     }
 

@@ -8,6 +8,7 @@ import { parseWebhookMentionEvent, processWebhookMention } from "./processor.js"
 import { MetricsRegistry } from "./metrics.js";
 
 const MAX_WEBHOOK_BODY_BYTES = 2 * 1024 * 1024;
+const WEBHOOK_BODY_TIMEOUT_MS = 30_000;
 const DELIVERY_RETENTION_MS = 24 * 60 * 60 * 1000;
 const MAX_TASK_ATTEMPTS = 2;
 
@@ -60,78 +61,99 @@ export function createWebhookServer(
     options.handleDelivery ?? createDefaultDeliveryHandler(options.botName ?? config.botName);
 
   return http.createServer(async (request, response) => {
-    const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-    if (request.method === "GET" && pathname === "/healthz") {
-      writeJson(response, 200, { ok: true, webhook: true });
-      return;
-    }
-    if (request.method === "GET" && pathname === "/metrics") {
-      response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
-      response.end(metrics.snapshotPrometheus());
-      return;
-    }
-    if (request.method !== "POST" || pathname !== webhookPath) {
-      response.setHeader("allow", "GET, POST");
-      writeJson(response, 404, { error: "Not found." });
-      return;
-    }
-
-    const deliveryId = singleHeader(request.headers["x-github-delivery"]);
-    const eventName = singleHeader(request.headers["x-github-event"]);
-    const signature = singleHeader(request.headers["x-hub-signature-256"]);
-    if (!deliveryId || !eventName || !signature) {
-      metrics.inc("webhook_requests_total", { result: "missing_headers" });
-      writeJson(response, 400, { error: "Missing GitHub webhook headers." });
-      return;
-    }
-
-    let body: Buffer;
     try {
-      body = await readRawBody(request, maxBodyBytes);
-    } catch (error) {
-      logger.warn(
-        { error, deliveryId, eventName },
-        "Rejected oversized or unreadable GitHub webhook body."
-      );
-      metrics.inc("webhook_requests_total", { result: "too_large" });
-      writeJson(response, 413, { error: "Webhook payload is too large." });
-      return;
-    }
-    if (!verifyGitHubWebhookSignature(body, signature, options.secret)) {
-      metrics.inc("webhook_requests_total", { result: "bad_signature" });
-      writeJson(response, 401, { error: "Invalid webhook signature." });
-      return;
-    }
-
-    let payload: unknown;
-    try {
-      payload = JSON.parse(body.toString("utf8"));
-    } catch {
-      writeJson(response, 400, { error: "Webhook payload is not valid JSON." });
-      return;
-    }
-
-    try {
-      const accepted = queue.enqueue(deliveryId, () =>
-        handleDelivery(eventName, payload, deliveryId)
-      );
-      if (!accepted) {
-        metrics.inc("webhook_deliveries_total", { result: "duplicate" });
-        writeJson(response, 202, { ok: true, duplicate: true });
+      const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+      if (request.method === "GET" && pathname === "/healthz") {
+        writeJson(response, 200, { ok: true, webhook: true });
         return;
       }
-      metrics.inc("webhook_deliveries_total", { event: eventName, result: "accepted" });
-    } catch (error) {
-      logger.warn(
-        { error, deliveryId, eventName },
-        "Webhook queue is full; asking GitHub to retry."
-      );
-      metrics.inc("webhook_deliveries_total", { result: "queue_full" });
-      writeJson(response, 503, { error: "Webhook queue is temporarily full." });
-      return;
-    }
+      if (request.method === "GET" && pathname === "/metrics") {
+        response.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
+        response.end(metrics.snapshotPrometheus());
+        return;
+      }
+      if (request.method !== "POST" || pathname !== webhookPath) {
+        response.setHeader("allow", "GET, POST");
+        writeJson(response, 404, { error: "Not found." });
+        return;
+      }
 
-    writeJson(response, 202, { ok: true });
+      const deliveryId = singleHeader(request.headers["x-github-delivery"]);
+      const eventName = singleHeader(request.headers["x-github-event"]);
+      const signature = singleHeader(request.headers["x-hub-signature-256"]);
+      if (!deliveryId || !eventName || !signature) {
+        metrics.inc("webhook_requests_total", { result: "missing_headers" });
+        writeJson(response, 400, { error: "Missing GitHub webhook headers." });
+        return;
+      }
+
+      let body: Buffer;
+      const declaredLength = Number(request.headers["content-length"]);
+      if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) {
+        metrics.inc("webhook_requests_total", { result: "too_large" });
+        writeJson(response, 413, { error: "Webhook payload is too large." });
+        request.destroy();
+        return;
+      }
+      const bodyTimeout = setTimeout(() => {
+        request.destroy(new Error("Webhook body read timed out."));
+      }, WEBHOOK_BODY_TIMEOUT_MS);
+      try {
+        body = await readRawBody(request, maxBodyBytes);
+      } catch (error) {
+        clearTimeout(bodyTimeout);
+        logger.warn(
+          { error, deliveryId, eventName },
+          "Rejected oversized or unreadable GitHub webhook body."
+        );
+        metrics.inc("webhook_requests_total", { result: "too_large" });
+        writeJson(response, 413, { error: "Webhook payload is too large." });
+        return;
+      }
+      clearTimeout(bodyTimeout);
+      if (!verifyGitHubWebhookSignature(body, signature, options.secret)) {
+        metrics.inc("webhook_requests_total", { result: "bad_signature" });
+        writeJson(response, 401, { error: "Invalid webhook signature." });
+        return;
+      }
+
+      let payload: unknown;
+      try {
+        payload = JSON.parse(body.toString("utf8"));
+      } catch {
+        writeJson(response, 400, { error: "Webhook payload is not valid JSON." });
+        return;
+      }
+
+      try {
+        const accepted = queue.enqueue(deliveryId, () =>
+          handleDelivery(eventName, payload, deliveryId)
+        );
+        if (!accepted) {
+          metrics.inc("webhook_deliveries_total", { result: "duplicate" });
+          writeJson(response, 202, { ok: true, duplicate: true });
+          return;
+        }
+        metrics.inc("webhook_deliveries_total", { event: eventName, result: "accepted" });
+      } catch (error) {
+        logger.warn(
+          { error, deliveryId, eventName },
+          "Webhook queue is full; asking GitHub to retry."
+        );
+        metrics.inc("webhook_deliveries_total", { result: "queue_full" });
+        writeJson(response, 503, { error: "Webhook queue is temporarily full." });
+        return;
+      }
+
+      writeJson(response, 202, { ok: true });
+    } catch (error: unknown) {
+      logger.error({ error }, "Webhook request handler failed.");
+      if (!response.headersSent) {
+        writeJson(response, 500, { error: "Webhook request failed." });
+      } else {
+        response.destroy(error instanceof Error ? error : undefined);
+      }
+    }
   });
 }
 
@@ -146,6 +168,9 @@ export async function startWebhookServer(): Promise<http.Server> {
   }
   if (!config.githubAppId || !config.githubAppPrivateKey) {
     throw new Error("GH_APP_ID and GH_APP_PRIVATE_KEY are required when WEBHOOK_ENABLED=true.");
+  }
+  if (!config.gooseApiKey) {
+    throw new Error("GOOSE_API_KEY is required when WEBHOOK_ENABLED=true.");
   }
 
   const server = createWebhookServer({
@@ -165,6 +190,14 @@ export async function startWebhookServer(): Promise<http.Server> {
     { port: config.port, path: config.webhookPath },
     "GitHub webhook server is listening."
   );
+
+  const shutdown = () => {
+    logger.info("Shutting down GitHub webhook server.");
+    server.close();
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+
   return server;
 }
 

@@ -9,7 +9,7 @@ ENV GOOSE_VERSION=${GOOSE_VERSION} \
 RUN apt-get update \
     && apt-get install --no-install-recommends -y bash ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | bash
+    && curl -fsSL "https://github.com/aaif-goose/goose/releases/download/${GOOSE_VERSION}/download_cli.sh" | bash
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -18,7 +18,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-# Action mode does not use this image. Webhook mode is explicitly opt-in.
-ENV WEBHOOK_ENABLED=false
+# This image is the webhook service. Action mode does not use it.
+ENV WEBHOOK_ENABLED=true
 EXPOSE 3000
 CMD ["node", "dist/src/webhook/server.js"]

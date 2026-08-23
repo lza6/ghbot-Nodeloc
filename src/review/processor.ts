@@ -864,6 +864,19 @@ async function maybeMergePullRequest(
     );
     return;
   }
+  if (livePullRequest.head.sha !== params.headSha) {
+    logger.info(
+      {
+        owner,
+        repo,
+        pullNumber,
+        reviewedHead: params.headSha,
+        currentHead: livePullRequest.head.sha
+      },
+      "Skipping merge because the pull request head changed after review."
+    );
+    return;
+  }
 
   if (params.requireAdminApproval) {
     const approvedByEligibleReviewer = await hasCurrentHeadApprovalFrom(octokit, {
@@ -893,8 +906,7 @@ async function maybeMergePullRequest(
     }
   }
 
-  const mergeablePullRequest =
-    params.mergeablePullRequest ?? (await waitForMergeable(octokit, owner, repo, pullNumber));
+  const mergeablePullRequest = await waitForMergeable(octokit, owner, repo, pullNumber);
   if (mergeablePullRequest.mergeable !== true || mergeablePullRequest.mergeable_state === "dirty") {
     if (params.emitStatusComments) {
       await withRetry("github.issues.createComment.notMergeable", async () => {
@@ -936,6 +948,7 @@ async function maybeMergePullRequest(
         owner,
         repo,
         pull_number: pullNumber,
+        sha: params.headSha,
         merge_method: config.mergeMethod,
         commit_title: `${params.title} (#${pullNumber})`
       });
@@ -996,6 +1009,7 @@ async function hasCurrentHeadApprovalFrom(
     params.headSha
   );
 
+  let lastLookupError: unknown;
   for (const login of approvedLogins) {
     try {
       const { data: permission } = await octokit.rest.repos
@@ -1027,6 +1041,7 @@ async function hasCurrentHeadApprovalFrom(
         return true;
       }
     } catch (error) {
+      lastLookupError = error;
       logger.warn(
         {
           error,
@@ -1038,6 +1053,10 @@ async function hasCurrentHeadApprovalFrom(
         "Failed to resolve collaborator permission while checking approval eligibility."
       );
     }
+  }
+
+  if (lastLookupError) {
+    throw lastLookupError;
   }
 
   return false;
