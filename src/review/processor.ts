@@ -1104,7 +1104,6 @@ async function getLatestBotReviewOutcomeForHead(
   return null;
 }
 
-
 async function submitReview(
   octokit: Octokit,
   params: {

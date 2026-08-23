@@ -358,7 +358,6 @@ async function listIssueComments(
   }));
 }
 
-
 async function loadReadme(octokit: Octokit, owner: string, repo: string): Promise<string> {
   try {
     const { data } = await octokit.rest.repos.getReadme({ owner, repo });

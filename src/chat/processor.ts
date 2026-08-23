@@ -198,7 +198,6 @@ async function hasExistingReply(
   return comments.some((comment) => comment.body?.includes(marker));
 }
 
-
 export function chatReplyLanguageInstruction(commentBody: string): string {
   const language = /\p{Script=Han}/u.test(commentBody) ? "Chinese" : "English";
   return `Reply in ${language}. Determine the reply language only from the user's latest comment; do not switch languages because the PR title, description, repository files, patch, repository knowledge, or tool output uses another language.`;
