@@ -2,22 +2,9 @@ import fs from "node:fs";
 import { config } from "../config.js";
 import { createGitHubCredentials } from "../github/client.js";
 import { createEventLogger, logger } from "../logger.js";
-import { withRetry } from "../retry.js";
-import { processPullRequestChat } from "../chat/processor.js";
-import { processIssueTriage, processPullRequestTriage } from "../triage/processor.js";
-import { deleteLocalReviewCache } from "../review/cache.js";
 import { loadRepositoryKnowledge } from "../repository/knowledge.js";
-import {
-  beginCommitReviewProgress,
-  finishCommitReviewProgress,
-  processConflictComment,
-  processRecheckComment,
-  processPullRequest,
-  processScheduledPendingMerges,
-  processPullRequestReviewApproval,
-  shouldReviewPullRequest
-} from "../review/processor.js";
 import { restorePersistentCache, savePersistentCache } from "../storage/cacheStore.js";
+import { buildDefaultEventRouter } from "./router.js";
 
 type GitHubRepository = {
   id?: number;
@@ -83,6 +70,13 @@ type ScheduledPayload = {
   repository: GitHubRepository;
 };
 
+type GitHubEventPayload =
+  | PullRequestPayload
+  | IssuePayload
+  | IssueCommentPayload
+  | PullRequestReviewPayload
+  | ScheduledPayload;
+
 async function main(): Promise<void> {
   const workflowCallEventName = process.env.GHBOT_EVENT_NAME;
   const payload = workflowCallEventName
@@ -141,216 +135,19 @@ async function main(): Promise<void> {
 
   let eventFailed = false;
   try {
-    if (eventName === "pull_request_target") {
-      const prPayload = payload as PullRequestPayload;
-      const ref = {
-        owner: prPayload.repository.owner.login,
-        repo: prPayload.repository.name,
-        pullNumber: prPayload.pull_request.number
-      };
+    const router = buildDefaultEventRouter();
+    const action = "action" in payload ? payload.action : undefined;
+    const dispatchResult = await router.dispatch({
+      eventName,
+      action,
+      payload: payload as unknown as Record<string, unknown>,
+      octokit,
+      gitToken: github.token
+    });
 
-      if (["opened", "edited", "reopened"].includes(prPayload.action)) {
-        try {
-          await processPullRequestTriage(octokit, {
-            owner: ref.owner,
-            repo: ref.repo,
-            pullNumber: ref.pullNumber
-          });
-        } catch (error) {
-          logger.warn(
-            { error, ...ref },
-            "Pull request triage failed; continuing with code review."
-          );
-        }
-      }
-
-      if (!(await shouldReviewPullRequest(octokit, ref))) {
-        await deleteLocalReviewCache(ref.pullNumber);
-        logger.info({ ...ref }, "Skipping pull request event outside REVIEW_BRANCHES.");
-        return;
-      }
-
-      if (prPayload.action === "opened") {
-        await withRetry("github.issues.createComment.started", async () => {
-          return octokit.rest.issues.createComment({
-            owner: prPayload.repository.owner.login,
-            repo: prPayload.repository.name,
-            issue_number: prPayload.pull_request.number,
-            body: "Automated review has started. I am checking this pull request now."
-          });
-        });
-      }
-
-      const progress =
-        prPayload.action === "synchronize"
-          ? await beginCommitReviewProgress(octokit, ref).catch((progressError: unknown) => {
-              logger.warn(
-                { error: progressError, ...ref },
-                "Failed to publish review start progress; continuing review."
-              );
-              return undefined;
-            })
-          : undefined;
-      try {
-        await processPullRequest(
-          octokit,
-          ref,
-          config.reviewStrictness === "strict" ? "strict" : "normal",
-          github.token
-        );
-      } catch (error) {
-        if (progress) {
-          await finishCommitReviewProgress(octokit, { ...ref, ...progress, failed: true }).catch(
-            (progressError: unknown) => {
-              logger.warn(
-                { error: progressError, ...ref },
-                "Failed to publish review failure progress."
-              );
-            }
-          );
-        }
-        throw error;
-      }
-      if (progress) {
-        await finishCommitReviewProgress(octokit, { ...ref, ...progress }).catch(
-          (progressError: unknown) => {
-            logger.warn(
-              { error: progressError, ...ref },
-              "Failed to publish review completion progress."
-            );
-          }
-        );
-      }
-      return;
+    if (!dispatchResult.handled) {
+      logger.warn({ eventName }, "Unhandled GitHub Actions event.");
     }
-
-    if (eventName === "issues") {
-      const issuePayload = payload as IssuePayload;
-      if (["opened", "edited", "reopened"].includes(issuePayload.action)) {
-        await processIssueTriage(octokit, {
-          owner: issuePayload.repository.owner.login,
-          repo: issuePayload.repository.name,
-          issueNumber: issuePayload.issue.number
-        });
-      }
-      return;
-    }
-
-    if (eventName === "issue_comment") {
-      const commentPayload = payload as IssueCommentPayload;
-      if (!commentPayload.issue.pull_request) {
-        logger.info(
-          { issueNumber: commentPayload.issue.number },
-          "Skipping issue comment because it is not on a pull request."
-        );
-        return;
-      }
-
-      if (commentPayload.comment.user?.type === "Bot") {
-        logger.info(
-          { issueNumber: commentPayload.issue.number, login: commentPayload.comment.user.login },
-          "Skipping bot-authored comment to prevent automation loops."
-        );
-        return;
-      }
-
-      // The three comment commands are independent features; one failing or
-      // not matching must not prevent the others from running.
-      const commentTasks: Array<[string, () => Promise<void>]> = [
-        [
-          "recheck",
-          () =>
-            processRecheckComment(octokit, {
-              owner: commentPayload.repository.owner.login,
-              repo: commentPayload.repository.name,
-              pullNumber: commentPayload.issue.number,
-              commentId: commentPayload.comment.id,
-              commenterLogin: commentPayload.comment.user.login,
-              commentBody: commentPayload.comment.body,
-              gitToken: github.token
-            })
-        ],
-        [
-          "conflict",
-          () =>
-            processConflictComment(octokit, {
-              owner: commentPayload.repository.owner.login,
-              repo: commentPayload.repository.name,
-              pullNumber: commentPayload.issue.number,
-              commentId: commentPayload.comment.id,
-              commenterLogin: commentPayload.comment.user.login,
-              commentBody: commentPayload.comment.body,
-              gitToken: github.token
-            })
-        ],
-        [
-          "chat",
-          () =>
-            processPullRequestChat(octokit, {
-              owner: commentPayload.repository.owner.login,
-              repo: commentPayload.repository.name,
-              pullNumber: commentPayload.issue.number,
-              commentId: commentPayload.comment.id,
-              commenterLogin: commentPayload.comment.user.login,
-              commentBody: commentPayload.comment.body
-            })
-        ]
-      ];
-
-      const results = await Promise.allSettled(commentTasks.map(([, run]) => run()));
-      results.forEach((result, index) => {
-        if (result.status === "rejected") {
-          const [label] = commentTasks[index]!;
-          logger.error(
-            { error: result.reason, task: label, issueNumber: commentPayload.issue.number },
-            "Comment command handler failed; other handlers still ran."
-          );
-        }
-      });
-      const rejectedResults = results.filter(
-        (result): result is PromiseRejectedResult => result.status === "rejected"
-      );
-      if (rejectedResults.length > 0) {
-        throw new AggregateError(
-          rejectedResults.map((result) => result.reason),
-          "One or more issue comment handlers failed; GitHub Actions should retry this delivery."
-        );
-      }
-      return;
-    }
-
-    if (eventName === "pull_request_review") {
-      const reviewPayload = payload as PullRequestReviewPayload;
-      const reviewerLogin = reviewPayload.review.user?.login;
-      if (!reviewerLogin) {
-        logger.warn(
-          { pullNumber: reviewPayload.pull_request.number },
-          "Skipping review event without reviewer login."
-        );
-        return;
-      }
-
-      await processPullRequestReviewApproval(octokit, {
-        owner: reviewPayload.repository.owner.login,
-        repo: reviewPayload.repository.name,
-        pullNumber: reviewPayload.pull_request.number,
-        reviewerLogin,
-        state: reviewPayload.review.state,
-        commitId: reviewPayload.review.commit_id
-      });
-      return;
-    }
-
-    if (eventName === "schedule") {
-      const scheduledPayload = payload as ScheduledPayload;
-      await processScheduledPendingMerges(octokit, {
-        owner: scheduledPayload.repository.owner.login,
-        repo: scheduledPayload.repository.name
-      });
-      return;
-    }
-
-    logger.warn({ eventName }, "Unhandled GitHub Actions event.");
   } catch (error) {
     eventFailed = true;
     throw error;
@@ -381,15 +178,7 @@ async function main(): Promise<void> {
   }
 }
 
-function getPullNumberForCache(
-  eventName: string,
-  payload:
-    | PullRequestPayload
-    | IssuePayload
-    | IssueCommentPayload
-    | PullRequestReviewPayload
-    | ScheduledPayload
-): number | undefined {
+function getPullNumberForCache(eventName: string, payload: GitHubEventPayload): number | undefined {
   if (eventName === "pull_request_target") {
     return (payload as PullRequestPayload).pull_request.number;
   }
@@ -403,33 +192,16 @@ function getPullNumberForCache(
   return undefined;
 }
 
-function readPayloadFromGitHubEventPath():
-  | PullRequestPayload
-  | IssuePayload
-  | IssueCommentPayload
-  | PullRequestReviewPayload
-  | ScheduledPayload {
+function readPayloadFromGitHubEventPath(): GitHubEventPayload {
   const eventPath = process.env.GITHUB_EVENT_PATH;
   if (!eventPath) {
     throw new Error("GITHUB_EVENT_PATH is required when workflow_call inputs are not provided.");
   }
 
-  return JSON.parse(fs.readFileSync(eventPath, "utf8")) as
-    | PullRequestPayload
-    | IssuePayload
-    | IssueCommentPayload
-    | PullRequestReviewPayload
-    | ScheduledPayload;
+  return JSON.parse(fs.readFileSync(eventPath, "utf8")) as GitHubEventPayload;
 }
 
-function buildPayloadFromWorkflowCallEnv(
-  eventName: string
-):
-  | PullRequestPayload
-  | IssuePayload
-  | IssueCommentPayload
-  | PullRequestReviewPayload
-  | ScheduledPayload {
+function buildPayloadFromWorkflowCallEnv(eventName: string): GitHubEventPayload {
   const action = process.env.GHBOT_EVENT_ACTION;
   const owner = process.env.GHBOT_REPOSITORY_OWNER;
   const repo = process.env.GHBOT_REPOSITORY_NAME;
