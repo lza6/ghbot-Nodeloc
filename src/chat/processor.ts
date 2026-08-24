@@ -6,6 +6,7 @@ import { config } from "../config.js";
 import { postPermissionDeniedComment } from "../github/commandFeedback.js";
 import { logger } from "../logger.js";
 import { withRetry } from "../retry.js";
+import { isNotFoundError } from "../github/errors.js";
 import { compactFilesForReview } from "../review/prompt.js";
 import type { PullRequestFile } from "../types.js";
 import {
@@ -302,10 +303,6 @@ export function chatToolBudgetInstruction(): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
 }
 
 export async function createRepositorySnapshot(sourceWorktree: string): Promise<string> {

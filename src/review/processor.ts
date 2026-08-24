@@ -21,6 +21,9 @@ import {
 } from "./policy.js";
 import { compactFilesForReview } from "./prompt.js";
 import { loadRepositoryKnowledge } from "../repository/knowledge.js";
+import { MergeGuard } from "./merge-guard.js";
+import { metrics } from "../metrics/collector.js";
+import { isNotFoundError, isAlreadyMergedError } from "../github/errors.js";
 import {
   canAutoResolveConflicts,
   describeConflictResolutionFailure,
@@ -28,6 +31,7 @@ import {
 } from "./conflictResolver.js";
 
 const reviewer = new GooseReviewer();
+const mergeGuard = new MergeGuard();
 const CHECK_RUN_NAME = "ghbot review";
 export const RECHECK_COMMENT_COMMAND = "/recheck";
 export const CONFLICT_COMMENT_COMMAND = "/conflict";
@@ -186,7 +190,7 @@ export async function processPullRequest(
   }
 
   const mergeablePullRequest = await waitForMergeable(octokit, owner, repo, pullNumber);
-  const conflictResolutionEligible = canAutoResolveConflicts({
+  const conflictResolutionEligible = !disposition.requiresAdminApproval && canAutoResolveConflicts({
     enabled: config.autoResolveConflicts,
     reviewPassed: true,
     mergeable: mergeablePullRequest.mergeable,
@@ -918,8 +922,16 @@ async function maybeMergePullRequest(
         });
       });
     }
+    metrics.recordMergeAttempt("failed");
     return;
   }
+
+  if (mergeGuard.isAlreadyAttempted(owner, repo, pullNumber)) {
+    logger.info({ owner, repo, pullNumber }, "Skipping merge because MergeGuard already attempted it.");
+    metrics.recordMergeAttempt("already_merged");
+    return;
+  }
+  mergeGuard.markAttempt(owner, repo, pullNumber);
 
   if (config.requireChecks) {
     const checks = await requiredChecksAreGreen(octokit, {
@@ -961,24 +973,13 @@ async function maybeMergePullRequest(
         { owner, repo, pullNumber, headSha: params.headSha },
         "Pull request was already merged by a concurrent run."
       );
+      metrics.recordMergeAttempt("already_merged");
       return;
     }
+    metrics.recordMergeAttempt("failed");
     throw error;
   }
-}
-
-function isAlreadyMergedError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
-    return false;
-  }
-  const candidate = error as { status?: unknown; message?: unknown };
-  if (candidate.status !== 405 && candidate.status !== 409) {
-    return false;
-  }
-  return (
-    typeof candidate.message === "string" &&
-    /already.{0,20}merged|Pull Request is not mergeable/i.test(candidate.message)
-  );
+  metrics.recordMergeAttempt("merged");
 }
 
 async function hasCurrentHeadApprovalFrom(
@@ -1062,8 +1063,9 @@ async function hasCurrentHeadApprovalFrom(
   return false;
 }
 
-function isNotFoundError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
+function errorHasStatus(error: unknown, key: string, expected: number): boolean {
+  const candidate = error as Record<string, unknown>;
+  return typeof candidate[key] === "number" && candidate[key] === expected;
 }
 
 function reviewProgressMarker(headSha: string): string {
@@ -1346,9 +1348,11 @@ async function markReviewCheckApproved(
   });
   const check = checks.data.check_runs
     .filter((item) => item.name === CHECK_RUN_NAME)
-    .sort(
-      (left, right) => Date.parse(right.started_at ?? "") - Date.parse(left.started_at ?? "")
-    )[0];
+    .sort((left, right) => {
+      const lt = left.started_at ? Date.parse(left.started_at) : 0;
+      const rt = right.started_at ? Date.parse(right.started_at) : 0;
+      return (Number.isNaN(rt) ? 0 : rt) - (Number.isNaN(lt) ? 0 : lt);
+    })[0];
 
   if (!check) {
     throw new Error(`Could not find ${CHECK_RUN_NAME} check for ${params.headSha}.`);

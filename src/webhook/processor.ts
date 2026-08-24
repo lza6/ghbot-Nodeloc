@@ -7,6 +7,7 @@ import { withRetry } from "../retry.js";
 import { compactFilesForReview } from "../review/prompt.js";
 import type { PullRequestFile } from "../types.js";
 import { listPullRequestFiles } from "../github/pulls.js";
+import { isNotFoundError } from "../github/errors.js";
 
 const WEBHOOK_CHAT_MARKER = "<!-- ghbot-webhook-chat:v1";
 const MAX_WEBHOOK_REPLY_CHARS = 60_000;
@@ -511,8 +512,4 @@ function asString(value: unknown): string | undefined {
 
 function asPositiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
-}
-
-function isNotFoundError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "status" in error && error.status === 404;
 }

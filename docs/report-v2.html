@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ghbot v2.0 迭代报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0E16;
+    --bg-soft: #0D1420;
+    --surface: #111A2B;
+    --surface-2: #16233A;
+    --hairline: rgba(157, 184, 218, 0.14);
+    --hairline-strong: rgba(157, 184, 218, 0.26);
+    --text: #E9EEF7;
+    --text-2: #A9B7CC;
+    --text-3: #6F7F99;
+    --accent: #6FB7FF;
+    --accent-deep: #3E8DE3;
+    --gain: #46E0A0;
+    --gain-bg: rgba(70, 224, 160, 0.10);
+    --warn: #F2BE5C;
+    --warn-bg: rgba(242, 190, 92, 0.10);
+    --bad: #FF7A86;
+    --bad-bg: rgba(255, 122, 134, 0.10);
+    --mono-bg: #0B111D;
+    --radius: 10px;
+    --font-display: 'Chakra Petch','Segoe UI','Microsoft YaHei',system-ui,sans-serif;
+    --font-body: 'IBM Plex Sans','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+    --font-mono: 'IBM Plex Mono','Consolas','Courier New',monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: rgba(111,183,255,0.28); color: #fff; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code, .mono {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--mono-bg);
+    border: 1px solid var(--hairline);
+    border-radius: 5px;
+    padding: 0.08em 0.42em;
+    color: #C9D8EE;
+    white-space: nowrap;
+  }
+  code.blk { display: inline-block; padding: 0.15em 0.5em; }
+
+  .num { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+
+  .container { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  /* ---------- Top rails ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(10px);
+    background: rgba(10,14,22,0.82);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .topbar-inner { display: flex; align-items: center; gap: 20px; padding: 12px 28px; max-width: 1120px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; letter-spacing: 0.04em; }
+  .brand-dot { width: 9px; height: 9px; border-radius: 3px; background: var(--gain); box-shadow: 0 0 12px rgba(70,224,160,0.8); }
+  .nav { display: flex; gap: 2px; flex-wrap: wrap; margin-left: auto; }
+  .nav a { color: var(--text-2); font-size: 0.82rem; padding: 5px 12px; border-radius: 6px; font-family: var(--font-mono); }
+  .nav a:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 72px 0 40px; position: relative; overflow: hidden; }
+  .hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(600px 260px at 82% -20%, rgba(62,141,227,0.16), transparent 70%),
+      radial-gradient(520px 220px at 8% 0%, rgba(70,224,160,0.07), transparent 70%);
+    pointer-events: none;
+  }
+  .hero .container { position: relative; }
+  .kicker { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.18em; color: var(--gain); text-transform: uppercase; margin: 0 0 18px; }
+  .kicker em { font-style: normal; color: var(--text-3); margin: 0 8px; }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.1rem, 5.2vw, 3.4rem);
+    line-height: 1.05;
+    margin: 0 0 16px;
+    font-weight: 600;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .hero-sub { color: var(--text-2); max-width: 66ch; font-size: 1.02rem; margin: 0 0 34px; }
+  .hero-sub strong { color: var(--text); font-weight: 600; }
+
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 36px; }
+  .meta-chip {
+    font-family: var(--font-mono); font-size: 0.76rem;
+    color: var(--text-2); border: 1px solid var(--hairline);
+    padding: 5px 12px; border-radius: 999px; background: var(--surface);
+  }
+  .meta-chip b { color: var(--text); font-weight: 500; }
+
+  .gate-strip {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    border: 1px solid var(--hairline); border-radius: var(--radius);
+    background: var(--surface); padding: 12px 14px; margin-bottom: 44px;
+  }
+  .gate {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 0.78rem;
+    color: var(--text-2); padding: 4px 12px; border-radius: 6px;
+    border: 1px solid var(--hairline); background: var(--bg-soft);
+  }
+  .gate .ok { color: var(--gain); font-weight: 600; }
+  .gate-label { text-transform: uppercase; letter-spacing: 0.04em; }
+  .gate-result { color: var(--text); }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: var(--radius); padding: 18px 18px 16px;
+    position: relative; overflow: hidden;
+  }
+  .stat::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent-deep); opacity: 0.7; }
+  .stat b.delta { display: block; font-family: var(--font-display); font-size: 1.55rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+  .stat b.delta .g { color: var(--gain); }
+  .stat .lbl { display: block; font-size: 0.8rem; color: var(--text-3); margin-top: 4px; letter-spacing: 0.02em; }
+  .stat .pair { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-2); margin-top: 2px; }
+  .stat .pair .from { color: var(--text-3); }
+
+  /* ---------- Sections ---------- */
+  section { padding: 60px 0 8px; scroll-margin-top: 74px; }
+  .sec-head { margin-bottom: 26px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; color: var(--accent); text-transform: uppercase; display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .eyebrow::before { content: "["; color: var(--text-3); }
+  .eyebrow::after { content: "]"; color: var(--text-3); }
+  h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; margin: 0 0 8px; letter-spacing: -0.01em; text-wrap: balance; }
+  .sec-lead { color: var(--text-2); max-width: 74ch; margin: 0 0 20px; font-size: 0.97rem; }
+  .sec-lead a code { text-decoration: none; }
+
+  .card { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 22px 24px; margin-bottom: 16px; }
+  .card h3 { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin: 0 0 6px; letter-spacing: 0.01em; }
+  .card .card-sub { color: var(--text-3); font-size: 0.85rem; margin: 0 0 16px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 20px; }
+  .flow-step {
+    font-family: var(--font-mono); font-size: 0.78rem;
+    border: 1px solid var(--hairline); background: var(--bg-soft);
+    border-radius: 7px; padding: 6px 12px; color: var(--text-2);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .flow-step b { color: var(--text); font-weight: 500; }
+  .flow-step.seq { border-color: var(--hairline-strong); }
+
+  /* ---------- Tables ---------- */
+  .tblwrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--radius); margin-bottom: 18px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.9rem; }
+  th {
+    font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-3); text-align: left; padding: 12px 16px;
+    border-bottom: 1px solid var(--hairline-strong); background: var(--bg-soft); white-space: nowrap;
+  }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(111,183,255,0.03); }
+  td .cell { display: block; }
+  td .cell-sub { display: block; color: var(--text-3); font-size: 0.8rem; margin-top: 2px; }
+  tr.row-danger td { background: linear-gradient(90deg, rgba(255,122,134,0.05), transparent 45%); }
+
+  .chk { font-weight: 600; white-space: nowrap; }
+  .chk.ok { color: var(--gain); }
+  .chk.warn { color: var(--warn); }
+  .chk.off { color: var(--text-3); }
+
+  .pill {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+    border-radius: 6px; padding: 2px 9px; letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .pill.p1 { color: var(--bad); background: var(--bad-bg); border: 1px solid rgba(255,122,134,0.3); }
+  .pill.p2 { color: var(--warn); background: var(--warn-bg); border: 1px solid rgba(242,190,92,0.3); }
+  .pill.p3 { color: var(--text-2); background: rgba(169,183,204,0.08); border: 1px solid var(--hairline-strong); }
+  .pill.crit { color: var(--bad); background: var(--bad-bg); border: 1px solid rgba(255,122,134,0.3); }
+  .pill.req { color: var(--warn); background: var(--warn-bg); border: 1px solid rgba(242,190,92,0.3); }
+  .pill.okp { color: var(--gain); background: var(--gain-bg); border: 1px solid rgba(70,224,160,0.3); }
+  .pill.grade { color: var(--text); background: var(--bg-soft); border: 1px solid var(--hairline-strong); }
+
+  .tag-gain { color: var(--gain); }
+  .tag-warn { color: var(--warn); }
+
+  /* ---------- Before / after delta rows ---------- */
+  .delta-row { display: grid; grid-template-columns: 220px 1fr 1fr 130px; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--hairline); }
+  .delta-row:last-child { border-bottom: none; }
+  .delta-row .k { font-weight: 500; color: var(--text); font-size: 0.93rem; }
+  .delta-row .k small { display: block; color: var(--text-3); font-size: 0.78rem; font-weight: 400; }
+  .delta-val { font-family: var(--font-mono); font-size: 0.92rem; }
+  .delta-val.before { color: var(--text-3); }
+  .delta-val.after { color: var(--text); font-weight: 600; }
+  .delta-chip { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 600; text-align: right; color: var(--gain); white-space: nowrap; }
+
+  .bar-track { height: 8px; border-radius: 99px; background: var(--bg-soft); border: 1px solid var(--hairline); overflow: hidden; display: flex; margin-top: 6px; }
+  .bar-before { background: rgba(111,183,255,0.35); height: 100%; }
+  .bar-gain { background: linear-gradient(90deg, rgba(70,224,160,0.55), var(--gain)); height: 100%; }
+  .bar-target { background: repeating-linear-gradient(90deg, transparent 0 4px, rgba(233,238,247,0.25) 4px 6px); height: 100%; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 2px 0; font-size: 0.8rem; color: var(--text-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 16px; height: 8px; border-radius: 3px; display: inline-block; }
+  .legend .i-b { background: rgba(111,183,255,0.35); }
+  .legend .i-g { background: var(--gain); }
+  .legend .i-t { background: repeating-linear-gradient(90deg, transparent 0 3px, rgba(233,238,247,0.3) 3px 5px); }
+
+  /* ---------- Finding list ---------- */
+  .find-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 20px; }
+  .find { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 16px 18px; }
+  .find .fid { font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-3); display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .find .fid::before { content: "▸"; color: var(--accent); }
+  .find h4 { font-size: 0.95rem; margin: 0 0 5px; font-weight: 600; color: var(--text); }
+  .find p { margin: 0; color: var(--text-2); font-size: 0.86rem; }
+  .find .loc { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-3); margin-top: 8px; display: block; }
+
+  .grade-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 18px; }
+  .grade-cell { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); padding: 13px 14px; text-align: center; }
+  .grade-cell .gv { font-family: var(--font-display); font-size: 1.4rem; font-weight: 600; display: block; }
+  .grade-cell .gl { font-size: 0.74rem; color: var(--text-3); display: block; margin-top: 3px; }
+
+  .quote-verdict { border-left: 3px solid var(--warn); background: var(--warn-bg); padding: 16px 18px; border-radius: 0 var(--radius) var(--radius) 0; margin-bottom: 22px; }
+  .quote-verdict .qv-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); margin-bottom: 4px; }
+  .quote-verdict p { margin: 0; color: var(--text); font-size: 0.95rem; }
+
+  /* ---------- Quiz ---------- */
+  .quiz-shell { border: 1px solid var(--hairline-strong); border-radius: 12px; overflow: hidden; background: var(--surface); margin-bottom: 40px; }
+  .quiz-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--hairline); background: var(--bg-soft); flex-wrap: wrap; }
+  .quiz-head h3 { margin: 0; font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; }
+  .quiz-progress { font-family: var(--font-mono); font-size: 0.82rem; color: var(--text-2); }
+  .quiz-progress b { color: var(--text); font-weight: 600; }
+  .quiz-body { padding: 10px 24px 24px; }
+  .q-item { padding: 22px 0; border-bottom: 1px solid var(--hairline); }
+  .q-item:last-of-type { border-bottom: none; }
+  .q-no { font-family: var(--font-mono); font-size: 0.72rem; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 6px; }
+  .q-stem { font-weight: 600; font-size: 0.97rem; margin: 0 0 12px; }
+  .q-opts { display: grid; gap: 8px; }
+  .q-opt {
+    display: flex; gap: 12px; align-items: flex-start;
+    width: 100%; text-align: left; cursor: pointer;
+    font-family: var(--font-body); font-size: 0.9rem; color: var(--text-2);
+    background: var(--bg-soft); border: 1px solid var(--hairline); border-radius: 8px;
+    padding: 10px 14px; transition: border-color 120ms, background 120ms;
+  }
+  .q-opt:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+  .q-opt .opt-key { font-family: var(--font-mono); font-weight: 600; color: var(--text-3); flex: 0 0 auto; }
+  .q-opt.correct { background: var(--gain-bg); border-color: var(--gain); color: var(--text); }
+  .q-opt.correct .opt-key { color: var(--gain); }
+  .q-opt.wrong { background: var(--bad-bg); border-color: var(--bad); color: var(--text); }
+  .q-opt.wrong .opt-key { color: var(--bad); }
+  .q-opt.dim { opacity: 0.5; }
+  .q-opt:disabled { cursor: default; }
+  .q-feedback { margin-top: 10px; font-size: 0.86rem; border-left: 3px solid var(--hairline-strong); padding: 8px 14px; background: var(--bg-soft); border-radius: 0 6px 6px 0; color: var(--text-2); }
+  .q-feedback b { color: var(--text); }
+  .feedback-hint { margin-top: 10px; font-size: 0.84rem; color: var(--text-3); font-style: italic; }
+
+  .quiz-verdict { margin: 18px 0 6px; }
+  .verdict-box {
+    display: none; padding: 20px 24px; border-radius: var(--radius); border: 1px solid var(--hairline-strong);
+    background: var(--bg-soft);
+  }
+  .verdict-box.show { display: block; }
+  .verdict-box .v-title { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; margin: 0 0 6px; }
+  .verdict-box.pass .v-title { color: var(--gain); }
+  .verdict-box.fail .v-title { color: var(--bad); }
+  .verdict-box p { margin: 0 0 16px; color: var(--text-2); font-size: 0.92rem; }
+
+  .btn {
+    font-family: var(--font-display); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.02em;
+    border: 1px solid var(--accent); color: #0B1018; background: var(--accent);
+    padding: 10px 22px; border-radius: 8px; cursor: pointer; transition: filter 120ms;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { border-color: var(--hairline-strong); background: var(--surface-2); color: var(--text-3); cursor: not-allowed; }
+  .btn.ghost { background: transparent; color: var(--accent); }
+
+  footer { border-top: 1px solid var(--hairline); padding: 34px 0 46px; margin-top: 40px; }
+  .foot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .foot-col .fh { font-family: var(--font-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin-bottom: 10px; }
+  .foot-col ul { list-style: none; margin: 0; padding: 0; }
+  .foot-col li { font-size: 0.85rem; color: var(--text-2); margin-bottom: 7px; }
+  .foot-note { margin-top: 22px; font-size: 0.78rem; color: var(--text-3); font-family: var(--font-mono); }
+
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .grid-2, .find-grid { grid-template-columns: 1fr; }
+    .grade-grid { grid-template-columns: repeat(3, 1fr); }
+    .delta-row { grid-template-columns: 1fr; gap: 6px; }
+    .delta-chip { text-align: left; }
+    .foot-grid { grid-template-columns: 1fr; }
+    section { padding-top: 44px; }
+    .hero { padding-top: 52px; }
+  }
+  @media (max-width: 560px) {
+    .stats { grid-template-columns: 1fr 1fr; }
+    .container { padding: 0 18px; }
+    .quiz-body { padding: 6px 16px 18px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand"><span class="brand-dot"></span>GHBOT&nbsp;·&nbsp;v2.0</div>
+    <nav class="nav" aria-label="目录">
+      <a href="#context">CTX</a>
+      <a href="#changes">CHANGES</a>
+      <a href="#metrics">METRICS</a>
+      <a href="#audit">AUDIT</a>
+      <a href="#review">REVIEW</a>
+      <a href="#quiz">QUIZ</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="container">
+    <p class="kicker">ghbot<em>/</em>iteration report<em>/</em>v1.2.0 → v2.0</p>
+    <h1>ghbot v2.0 迭代报告</h1>
+    <p class="hero-sub">
+      ghbot 是基于 GitHub Actions 的机器人，用 goose CLI（OpenAI 兼容 chat API）完成
+      <strong>PR 审查、Issue/PR 分类、@bot 对话、冲突修复</strong>，并可选运行只读 webhook 长驻模式。
+      本次 v2.0 半程迭代按《下一步改进指南》M0–M7 推进，第一阶段落地
+      <strong>M0 测试加固、M1 可靠性、M2 可观测性</strong>三个方向，全部门禁通过、无 P0 阻塞项。
+    </p>
+
+    <div class="meta-row">
+      <span class="meta-chip">基准版本 <b>v1.2.0</b> · commit <b>db53296</b></span>
+      <span class="meta-chip">当前 <b>v2.0 半程</b></span>
+      <span class="meta-chip">阶段 <b>M0 · M1 · M2</b></span>
+      <span class="meta-chip">审计日期 <b>2026-08-24</b></span>
+      <span class="meta-chip">覆盖范围 <b>src 35 + test 48</b></span>
+    </div>
+
+    <div class="gate-strip" role="list" aria-label="门禁状态">
+      <span class="gate" role="listitem"><span class="ok">✓</span><span class="gate-label">typecheck</span><span class="gate-result">PASS</span></span>
+      <span class="gate" role="listitem"><span class="ok">✓</span><span class="gate-label">lint</span><span class="gate-result">0 error</span></span>
+      <span class="gate" role="listitem"><span class="ok">✓</span><span class="gate-label">format:check</span><span class="gate-result">Prettier OK</span></span>
+      <span class="gate" role="listitem"><span class="ok">✓</span><span class="gate-label">test</span><span class="gate-result">321 / 321</span></span>
+      <span class="gate" role="listitem"><span class="ok">✓</span><span class="gate-label">build</span><span class="gate-result">dist/ OK</span></span>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <b class="delta num"><span class="g">+170</span></b>
+        <span class="pair">151 <span class="from">→</span> 321</span>
+        <span class="lbl">测试用例 · ×2.1</span>
+      </div>
+      <div class="stat">
+        <b class="delta num"><span class="g">+12</span></b>
+        <span class="pair">36 <span class="from">→</span> 48</span>
+        <span class="lbl">测试文件</span>
+      </div>
+      <div class="stat">
+        <b class="delta num">66.20<span class="g">%</span></b>
+        <span class="pair">lines <span class="from">+4.79pp</span></span>
+        <span class="lbl">行覆盖率</span>
+      </div>
+      <div class="stat">
+        <b class="delta num">87.36<span class="g">%</span></b>
+        <span class="pair">branches <span class="from">+4.38pp</span></span>
+        <span class="lbl">分支覆盖率</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- ================= Context ================= -->
+  <section id="context">
+    <div class="sec-head">
+      <p class="eyebrow">CTX</p>
+      <h2>项目与本次迭代范围</h2>
+      <p class="sec-lead">处理不受信任的 PR 内容与多种凭据，凭据隔离是硬性红线：GitHub token、App 私钥、R2 与真实 goose API key 绝不进入 goose 容器、PR 快照或 git 子进程环境。</p>
+    </div>
+
+    <div class="card">
+      <h3>系统能力地图</h3>
+      <p class="card-sub">ghbot 在生产中同时承担五个链路，本次迭代未改变其对外行为，仅加固内部质量。</p>
+      <div class="flow">
+        <span class="flow-step">1 <b>PR 审查</b> review / change / comment / result</span>
+        <span class="flow-step">2 <b>Issue/PR 分类</b> 标签 + 两阶段重复检测</span>
+        <span class="flow-step">3 <b>@bot 对话</b> 一次性 Docker 容器 + 脱敏快照</span>
+        <span class="flow-step">4 <b>冲突修复</b> safeToCommit=true 后才推送</span>
+        <span class="flow-step">5 <b>Webhook 模式</b> 可选 · 默认关闭 · 只读</span>
+      </div>
+      <p style="margin:0;color:var(--text-2);font-size:0.9rem">
+        合并策略由 <code>REVIEW_POLICY</code> 控制（默认 <code>allow</code>），<code>AUTO_MERGE</code> 保持 opt-in；
+        事件路由在 v1.2.0 已提取为 <code>src/actions/router.ts</code> 的 <code>EventRouter</code>，review / triage / chat / conflict 四类流程在此分发。
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>v2.0 迭代覆盖了什么</h3>
+      <p class="card-sub">范围：M0 测试基建与覆盖率、M1 可靠性组件、M2 可观测性组件。M3 大文件拆分与 M4–M7 后续里程碑留待下一阶段。</p>
+      <div class="grid-2">
+        <div>
+          <p style="font-family:var(--font-mono);font-size:0.78rem;margin:0 0 10px;color:var(--text-3)">已落地方向</p>
+          <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:0.9rem">
+            <li>M0：7 个模块覆盖率补测，新增 10 个专项测试文件</li>
+            <li>M1：<code>withRetry</code> 智能重试、<code>MergeGuard</code>、<code>failureMessages</code></li>
+            <li>M2：<code>MetricsCollector</code> 指标收集器</li>
+            <li>测试总数 151 → <b>321</b>，行覆盖率 61.41% → 66.20%</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-family:var(--font-mono);font-size:0.78rem;margin:0 0 10px;color:var(--text-3)">依赖前置、暂缓方向</p>
+          <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:0.9rem">
+            <li>M0-8 集成测试：需 testcontainers / MinIO 基础设施</li>
+            <li>M1-2 陈旧检测、M2-1 全链路日志：待 <code>processor.ts</code> 拆分</li>
+            <li>M3 大文件拆分：<code>processor.ts</code> 1736 行 / <code>conflictResolver.ts</code> 1250 行</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Changes ================= -->
+  <section id="changes">
+    <div class="sec-head">
+      <p class="eyebrow">CHANGES</p>
+      <h2>本轮落地内容（M0 / M1 / M2）</h2>
+      <p class="sec-lead">11 个里程碑项落地：其中 8 项完整接入并验证，3 个新模块已交付（含 100% 测试）但尚未接线到生产路径——这是审计与 critical review 的共同关注点。</p>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">M0 · 测试加固</caption>
+        <thead>
+          <tr><th>里程碑</th><th>目标模块</th><th>变化</th><th style="text-align:right">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">M0-1</td><td><code>repository/knowledge.ts</code> normalizeKnowledge</td><td>CRLF/LF 行尾归一，缓存校验与快照写入一致</td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-2</td><td><code>review/gooseReviewer.ts</code></td><td>覆盖 26.57% → <b class="num">97.35%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-3</td><td><code>storage/cacheStore.ts</code>（R2）</td><td>覆盖 49.01% → <b class="num">100%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-4</td><td><code>triage/processor.ts</code></td><td>覆盖 56.77% → <b class="num">63.19%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-5</td><td><code>webhook/processor.ts</code></td><td>覆盖 63.90% → <b class="num">72.39%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-6</td><td><code>review/conflictResolver.ts</code></td><td>覆盖 56.56% → <b class="num">57.52%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+          <tr><td class="mono">M0-7</td><td><code>review/processor.ts</code></td><td>覆盖 49.08% → <b class="num">49.42%</b></td><td style="text-align:right"><span class="chk ok">✓ 落地</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">M1 · 可靠性</caption>
+        <thead>
+          <tr><th>里程碑</th><th>组件</th><th>内容</th><th style="text-align:right">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">M1-1</td><td><code>src/retry.ts</code> withRetry</td><td>指数退避 + 抖动 + 4xx 可重试分类 + 总超时兜底</td><td style="text-align:right"><span class="chk ok">✓ 落地接入</span></td></tr>
+          <tr><td class="mono">M1-3</td><td><code>src/review/merge-guard.ts</code></td><td>合并防重入锁，<b>100% 测试覆盖</b></td><td style="text-align:right"><span class="chk warn">◇ 已建未接入</span></td></tr>
+          <tr><td class="mono">M1-4</td><td><code>src/ai/failureMessages.ts</code></td><td><code>categorizeFailure</code> / <code>formatFailureMessage</code>，失败分类与告警文案，<b>100% 覆盖</b></td><td style="text-align:right"><span class="chk warn">◇ 已建未接入</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">M2 · 可观测性</caption>
+        <thead>
+          <tr><th>里程碑</th><th>组件</th><th>内容</th><th style="text-align:right">状态</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">M2-2</td><td><code>src/metrics/collector.ts</code></td><td><code>recordReviewDuration</code> / <code>recordGooseCall</code> / <code>recordConflictResolution</code> / <code>recordMergeAttempt</code>，<b>100% 覆盖</b></td><td style="text-align:right"><span class="chk warn">◇ 已建未接入</span></td></tr>
+          <tr><td class="mono">M2-1</td><td>全链路日志贯穿</td><td>需 <code>processor.ts</code> 拆分后接入</td><td style="text-align:right"><span class="chk off">○ 未落地</span></td></tr>
+          <tr><td class="mono">M1-2</td><td>陈旧检测（stale detection）</td><td>LLM 运行期间 head 变化时丢弃结果、浪费完整调用；需处理器拆分</td><td style="text-align:right"><span class="chk off">○ 未落地</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" style="border-color:var(--hairline-strong)">
+      <h3>新增专项测试文件（10 个 / 125 条用例）</h3>
+      <p class="card-sub">其余 +45 条用例来自既有测试文件的增强。审计复核：新模块全部 100% 覆盖，核心大模块仍有缺口。</p>
+      <div class="tblwrap" style="margin-bottom:0;border:none">
+        <table style="min-width:560px">
+          <thead>
+            <tr><th>测试文件</th><th style="text-align:right">用例数</th><th style="text-align:right">覆盖</th><th style="text-align:right">评价</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>test/goose-reviewer.test.ts</code></td><td class="num" style="text-align:right">11</td><td class="num" style="text-align:right">97.35%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/r2-storage.test.ts</code></td><td class="num" style="text-align:right">22</td><td class="num" style="text-align:right">100%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/webhook-processor-extra.test.ts</code></td><td class="num" style="text-align:right">35</td><td class="num" style="text-align:right">72.39%</td><td style="text-align:right"><span class="pill p2" style="text-align:center">中</span></td></tr>
+            <tr><td><code>test/conflict-resolver-extra.test.ts</code></td><td class="num" style="text-align:right">12</td><td class="num" style="text-align:right">57.52%</td><td style="text-align:right"><span class="pill p1" style="text-align:center">待补</span></td></tr>
+            <tr><td><code>test/triage-processor-extra.test.ts</code></td><td class="num" style="text-align:right">11</td><td class="num" style="text-align:right">—</td><td style="text-align:right"><span class="chk ok">✓ 已覆盖</span></td></tr>
+            <tr><td><code>test/merge-guard.test.ts</code></td><td class="num" style="text-align:right">5</td><td class="num" style="text-align:right">100%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/metrics-collector.test.ts</code></td><td class="num" style="text-align:right">9</td><td class="num" style="text-align:right">100%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/failure-messages.test.ts</code></td><td class="num" style="text-align:right">8</td><td class="num" style="text-align:right">100%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/retry-extra.test.ts</code></td><td class="num" style="text-align:right">5</td><td class="num" style="text-align:right">100%</td><td style="text-align:right"><span class="chk ok">✓ 达标</span></td></tr>
+            <tr><td><code>test/review-processor-extra.test.ts</code></td><td class="num" style="text-align:right">7</td><td class="num" style="text-align:right">49.42%</td><td style="text-align:right"><span class="pill p1" style="text-align:center">待补</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= Metrics ================= -->
+  <section id="metrics">
+    <div class="sec-head">
+      <p class="eyebrow">METRICS</p>
+      <h2>指标对照：v1.2.0 → v2.0</h2>
+      <p class="sec-lead">测试规模翻倍以上，覆盖率各分项稳步上升；核心大模块仍低于 80% 目标，是下一阶段主攻方向。</p>
+    </div>
+
+    <div class="card" style="padding:18px 24px 12px">
+      <div class="delta-row">
+        <div class="k">测试文件<small>test/*.test.ts</small></div>
+        <div class="delta-val before num">36</div>
+        <div class="delta-val after num">48</div>
+        <div class="delta-chip num">+12</div>
+      </div>
+      <div class="delta-row">
+        <div class="k">测试用例<small>node:test + tsx</small></div>
+        <div class="delta-val before num">151</div>
+        <div class="delta-val after num">321</div>
+        <div class="delta-chip num">+170 · ×2.1</div>
+      </div>
+      <div class="delta-row">
+        <div class="k">行覆盖率 lines<small>全局</small></div>
+        <div class="delta-val before num">61.41%</div>
+        <div class="delta-val after num">66.20%</div>
+        <div class="delta-chip num">+4.79pp</div>
+      </div>
+      <div class="delta-row">
+        <div class="k">分支覆盖率 branches<small>全局</small></div>
+        <div class="delta-val before num">82.98%</div>
+        <div class="delta-val after num">87.36%</div>
+        <div class="delta-chip num">+4.38pp</div>
+      </div>
+      <div class="delta-row">
+        <div class="k">函数覆盖率 functions<small>全局</small></div>
+        <div class="delta-val before num">69.97%</div>
+        <div class="delta-val after num">75.57%</div>
+        <div class="delta-chip num">+5.60pp</div>
+      </div>
+
+      <div class="delta-row">
+        <div class="k">覆盖率趋势<small>虚线为 80% 目标线</small></div>
+        <div style="grid-column:2 / span 3">
+          <div class="bar-track" role="img" aria-label="行覆盖率 61.41% 提升至 66.20%，目标 80%">
+            <span class="bar-before" style="width:76.76%"></span>
+            <span class="bar-gain" style="width:5.99%"></span>
+            <span class="bar-target" style="width:17.25%"></span>
+          </div>
+          <div class="legend">
+            <span><i class="i-b"></i>基线 61.41%</span>
+            <span><i class="i-g"></i>本轮 +4.79pp</span>
+            <span><i class="i-t"></i>距 80% 目标缺口 13.80pp</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tblwrap">
+      <table>
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">关键模块覆盖现状（审计 7.1，目标 ≥80%）</caption>
+        <thead>
+          <tr><th>模块</th><th style="text-align:right">当前 lines</th><th style="text-align:right">目标</th><th style="text-align:right">缺口</th><th>主要待补路径</th></tr>
+        </thead>
+        <tbody>
+          <tr class="row-danger"><td><code>review/processor.ts</code>（1736 行）</td><td class="num" style="text-align:right">49.42%</td><td class="num" style="text-align:right">80%</td><td class="num tag-danger" style="text-align:right;color:var(--bad)">-30.58pp</td><td>主流程、旧审查清理、合并/审批、调度</td></tr>
+          <tr class="row-danger"><td><code>review/conflictResolver.ts</code>（1250 行）</td><td class="num" style="text-align:right">57.52%</td><td class="num" style="text-align:right">80%</td><td class="num" style="text-align:right;color:var(--bad)">-22.48pp</td><td>冲突解析主流程、验证运行、命令执行</td></tr>
+          <tr><td><code>triage/processor.ts</code></td><td class="num" style="text-align:right">63.19%</td><td class="num" style="text-align:right">80%</td><td class="num" style="text-align:right;color:var(--warn)">-16.81pp</td><td>两阶段详查、标签创建、重复评论</td></tr>
+          <tr><td><code>webhook/processor.ts</code></td><td class="num" style="text-align:right">72.39%</td><td class="num" style="text-align:right">80%</td><td class="num" style="text-align:right;color:var(--warn)">-7.61pp</td><td>提及主流程、上下文加载、组织成员分支</td></tr>
+          <tr><td><code>webhook/server.ts</code></td><td class="num" style="text-align:right">75.87%</td><td class="num" style="text-align:right">80%</td><td class="num" style="text-align:right;color:var(--warn)">-4.13pp</td><td>队列满 503、body 超时 413、启动流程</td></tr>
+          <tr><td><code>storage/cacheStore.ts</code></td><td class="num" style="text-align:right">95.73%</td><td class="num" style="text-align:right">95%</td><td class="num" style="text-align:right;color:var(--gain)">达标</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= Audit ================= -->
+  <section id="audit">
+    <div class="sec-head">
+      <p class="eyebrow">AUDIT</p>
+      <h2>审计发现（audit-v2-final）</h2>
+      <p class="sec-lead">最终审计覆盖全部 src/ 35 文件、test/ 48 文件、配置、文档与工作流。结论：无 P0 阻塞，整体安全评级 <b style="color:var(--text)">A-</b>；8 项 P1、10 项 P2、10 项 P3。</p>
+    </div>
+
+    <div class="find-grid" style="margin-bottom:22px">
+      <div class="find"><span class="fid">P0 阻塞项</span><h4>0</h4><p>构建、类型检查、测试全部通过，无阻塞项。</p></div>
+      <div class="find"><span class="fid">安全评级</span><h4 style="color:var(--gain)">A-</h4><p>凭据隔离 A · 注入防护 A · 快照脱敏 B+ · 密钥脱敏 A · 子进程安全 B。</p></div>
+    </div>
+
+    <h3 style="font-family:var(--font-display);font-size:1.05rem;margin:0 0 12px">P1 · 高优先级（合并前应处理）</h3>
+    <div class="tblwrap">
+      <table style="min-width:760px">
+        <thead><tr><th>ID</th><th>问题</th><th>位置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr class="row-danger"><td><span class="pill p1">P1-01</span></td><td><code>MergeGuard</code> 未接入生产</td><td><code>review/merge-guard.ts</code></td><td>有定义有测试，<code>maybeMergePullRequest</code> 未调用，无实际防重入</td></tr>
+          <tr class="row-danger"><td><span class="pill p1">P1-02</span></td><td><code>failureMessages</code> 未接入</td><td><code>ai/failureMessages.ts</code></td><td>无任何模块 import，告警文案能力未生效</td></tr>
+          <tr class="row-danger"><td><span class="pill p1">P1-03</span></td><td><code>MetricsCollector</code> 未接入</td><td><code>metrics/collector.ts</code></td><td>Actions 模式指标收集完全未启用</td></tr>
+          <tr><td><span class="pill p1">P1-04</span></td><td>大文件：<code>processor.ts</code> 1736 行</td><td><code>review/processor.ts</code></td><td>远超 800 行上限，7+ 职责混排</td></tr>
+          <tr><td><span class="pill p1">P1-05</span></td><td>大文件：<code>conflictResolver.ts</code> 1250 行</td><td><code>review/conflictResolver.ts</code></td><td>5+ 独立职责，<b>未落地</b>到下一阶段</td></tr>
+          <tr><td><span class="pill p1">P1-06</span></td><td>覆盖率不足 80% 目标</td><td>全局</td><td>lines 66.20%；<code>processor</code> 49.42%、<code>triage</code> 63.19%</td></tr>
+          <tr><td><span class="pill p1">P1-07</span></td><td><code>waitForMergeable</code> 无总超时</td><td><code>processor.ts:1411-1432</code></td><td>5 次重试 ×1s 无兜底，mergeable 可能无限返回 null</td></tr>
+          <tr><td><span class="pill p1">P1-08</span></td><td>审查运行期间无陈旧检测</td><td><code>processor.ts:98-105</code></td><td>LLM 期间 head 变化直接丢弃结果，浪费完整调用</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family:var(--font-display);font-size:1.05rem;margin:26px 0 12px">P2 · 中优先级（抽样）</h3>
+    <div class="find-grid">
+      <div class="find"><span class="fid">P2-01</span><h4>快照排除清单不完整</h4><p>缺 <code>.npmrc</code>、<code>terraform/</code>、<code>kube/</code>、<code>docker/</code> 配置，可能含注册表令牌或云凭据。</p><span class="loc">security/sanitization.ts</span></div>
+      <div class="find"><span class="fid">P2-02</span><h4>Webhook 队列无持久化</h4><p>进程重启丢失全部待处理任务。</p><span class="loc">webhook/server.ts</span></div>
+      <div class="find"><span class="fid">P2-03/04</span><h4>两处分页缺失</h4><p><code>processScheduledPendingMerges</code> 与 <code>triage listCandidates</code> 均只取第一页 100 条。</p><span class="loc">review/processor.ts · triage/processor.ts</span></div>
+      <div class="find"><span class="fid">P2-08/09</span><h4>凭据进入子进程环境</h4><p><code>OPENAI_API_KEY</code> 暴露到 goose 子进程 env；<code>GHBOT_GIT_TOKEN</code> 经 askpass 环境变量传递。</p><span class="loc">ai/gooseCli.ts · review/conflictResolver.ts</span></div>
+      <div class="find"><span class="fid">P2-10</span><h4>日志 redact 模式不一致</h4><p>redact 覆盖 <code>err.stderr</code> 但遗漏 <code>error.stderr</code>。</p><span class="loc">logger.ts:33-34</span></div>
+      <div class="find"><span class="fid">P3-07</span><h4>CI 无覆盖率门槛</h4><p><code>ci.yml</code> 未设置覆盖率阈值，下降不会被阻止。</p><span class="loc">.github/workflows/ci.yml</span></div>
+    </div>
+
+    <div class="card">
+      <h3>安全评审逐项评级</h3>
+      <p class="card-sub">审计独立给出六个维度的评级与要点，作为生产准入依据。</p>
+      <div class="grade-grid">
+        <div class="grade-cell"><span class="gv" style="color:var(--gain)">A</span><span class="gl">凭据隔离</span></div>
+        <div class="grade-cell"><span class="gv" style="color:var(--gain)">A</span><span class="gl">注入防护</span></div>
+        <div class="grade-cell"><span class="gv" style="color:var(--warn)">B+</span><span class="gl">快照脱敏</span></div>
+        <div class="grade-cell"><span class="gv" style="color:var(--gain)">A</span><span class="gl">密钥脱敏</span></div>
+        <div class="grade-cell"><span class="gv" style="color:var(--warn)">B</span><span class="gl">子进程安全</span></div>
+      </div>
+      <p style="margin:0;color:var(--text-2);font-size:0.9rem">
+        摘要：容器内无真实凭据、一次性代理认证可靠；路径/分支/仓库名白名单校验完善；
+        正则 + pino redact 双保险覆盖 PAT / npm / OpenAI / Bearer / 私钥样式；
+        子进程环境变量存在低频泄露风险，故子进程安全为 B。
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= Critical Review ================= -->
+  <section id="review">
+    <div class="sec-head">
+      <p class="eyebrow">REVIEW</p>
+      <h2>关键评审发现（critical-review-v2）</h2>
+      <p class="sec-lead">独立 critical review 逐文件复核 src/ 与 test/，给出 6 项 CRITICAL、8 项 REQUIRED、10 项 SUGGESTION。</p>
+    </div>
+
+    <div class="quote-verdict">
+      <div class="qv-label">Verdict</div>
+      <p><b style="color:var(--warn)">Needs Discussion</b> — 代码结构良好、安全基线强，但存在若干真实缺陷：以"已定义但未接线"的死代码为主，另有排序比较器契约违规与合并前审批竞态。当前部署无即时可利用或数据破坏性缺陷。</p>
+    </div>
+
+    <div class="tblwrap">
+      <table style="min-width:840px">
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">CRITICAL · 发布前必须处理</caption>
+        <thead><tr><th>ID</th><th>发现</th><th>位置</th><th>影响</th></tr></thead>
+        <tbody>
+          <tr class="row-danger"><td><span class="pill crit">C1</span></td><td><code>MergeGuard</code> 从未被调用</td><td><code>review/merge-guard.ts</code></td><td>并发 schedule/approval/recheck 可对同一 PR 竞态调用 <code>pulls.merge</code></td></tr>
+          <tr class="row-danger"><td><span class="pill crit">C2</span></td><td><code>MetricsCollector</code> 从未被 import</td><td><code>metrics/collector.ts</code></td><td>Actions 模式观测能力完全失效，可观测性承诺落空</td></tr>
+          <tr class="row-danger"><td><span class="pill crit">C3</span></td><td><code>failureMessages.ts</code> 无生产引用</td><td><code>ai/failureMessages.ts</code></td><td>更优的用户侧失败文案未生效</td></tr>
+          <tr><td><span class="pill crit">C4</span></td><td>Sort 比较器返回 <code>NaN</code></td><td><code>processor.ts:1347-1351</code></td><td><code>Date.parse("")</code> 为 NaN，可能选错 check run 或抛"Could not find"</td></tr>
+          <tr><td><span class="pill crit">C5</span></td><td>冲突修复先于管理员审批</td><td><code>processor.ts:188-249</code></td><td><code>require_approval</code> 下 admin 审批前即可推提交并合并，策略被绕过</td></tr>
+          <tr><td><span class="pill crit">C6</span></td><td><code>isNotFoundError</code> 五处重复</td><td>processor / chat / webhook / conflictResolver / knowledge</td><td>API 404 形态变化需同步五处，违 DRY</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tblwrap">
+      <table style="min-width:720px">
+        <caption style="font-family:var(--font-mono);font-size:0.72rem;text-align:left;color:var(--text-3);padding:10px 16px 2px">REQUIRED · 建议优先（非阻塞）</caption>
+        <thead><tr><th>ID</th><th>发现</th><th>位置</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pill req">R3</span></td><td><code>GOOSE_MODEL</code> 默认 <code>gpt-5.4</code> 可能不存在</td><td><code>config.ts:62</code></td><td>新部署将模型找不到失败，除非覆盖环境变量</td></tr>
+          <tr><td><span class="pill req">R8</span></td><td><code>waitForMergeable</code> 仅轮询 5 次 ×1s</td><td><code>processor.ts:1411-1432</code></td><td>大 PR 合并性计算 &gt;10s，建议指数退避（对应审计 P1-07）</td></tr>
+          <tr><td><span class="pill req">R2</span></td><td>webhook 内类型守卫重复</td><td><code>webhook/processor.ts:500-514</code></td><td><code>isRecord/asRecord/asString</code> 建议抽共享工具模块</td></tr>
+          <tr><td><span class="pill req">R1</span></td><td>重复守卫收敛</td><td>全局</td><td>与 C6 同源：单点导出 <code>isNotFoundError</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>评审确认的"干净项"</h3>
+      <p class="card-sub">无需改动，评审明确认可。</p>
+      <ul style="margin:0;padding-left:18px;color:var(--text-2);font-size:0.9rem">
+        <li>安全态势：容器隔离、凭据脱敏、路径穿越防护、快照过滤均强</li>
+        <li>配置 zod schema 校验彻底、错误处理一致、全程遵循不可变风格</li>
+        <li>全部既有测试通过且结构良好</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= Quiz ================= -->
+  <section id="quiz">
+    <div class="sec-head">
+      <p class="eyebrow">QUIZ</p>
+      <h2>知识校验：读完即答</h2>
+      <p class="sec-lead">10 道单选题，全部基于上方报告数据。<b style="color:var(--gain)">答对 ≥8 题（80%）视为通过</b>。逐题作答自动判分，全部答完后可查看结业结论。</p>
+    </div>
+
+    <div class="quiz-shell">
+      <div class="quiz-head">
+        <h3>v2.0 迭代知识校验</h3>
+        <div class="quiz-progress" aria-live="polite">
+          已作答 <b id="qp-answered">0</b>/10 · 正确 <b id="qp-correct">0</b>
+        </div>
+      </div>
+      <div class="quiz-body" id="quiz-body" aria-live="polite"></div>
+      <div style="padding:0 24px 24px">
+        <div class="quiz-verdict">
+          <div class="verdict-box" id="verdict-panel" role="status">
+            <p class="v-title" id="verdict-title">—</p>
+            <p id="verdict-detail"></p>
+            <button class="btn ghost" type="button" id="btn-reset">重新答题</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" type="button" id="btn-submit" disabled>查看结业结论</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div class="foot-grid">
+      <div class="foot-col">
+        <div class="fh">数据来源</div>
+        <ul>
+          <li><code>workflow_status.md</code>（仓库根）</li>
+          <li><code>docs/audit-v2-final.md</code></li>
+          <li><code>docs/critical-review-v2.md</code></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <div class="fh">本报告内容</div>
+        <ul>
+          <li>门禁与指标：基于实际运行输出</li>
+          <li>审计发现：基于 audit-v2-final 复核</li>
+          <li>评审发现：基于 critical-review-v2 复核</li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <div class="fh">范围声明</div>
+        <ul>
+          <li>v2.0 半程：M0 / M1 / M2 第一阶段</li>
+          <li>M3 大文件拆分、M4–M7 未在本轮范围</li>
+        </ul>
+      </div>
+    </div>
+    <p class="foot-note">ghbot · v2.0 iteration report · generated 2026-08-24</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var PASS_THRESHOLD = 8;
+
+  var QUESTIONS = [
+    {
+      q: "本次 v2.0 半程迭代（第一阶段）聚焦的技术方向是？",
+      opts: [
+        "引入新的 AI Provider / 模型",
+        "可靠性、可观测性与测试基建加固（M0/M1/M2）",
+        "将 Actions 模式全部迁移到 webhook 长驻模式",
+        "从头重写冲突修复引擎"
+      ],
+      a: 1,
+      why: "依《下一步改进指南》M0–M7 推进，第一阶段落地 M0 测试加固、M1 可靠性、M2 可观测性；M3 大文件拆分与 M4–M7 留待后续。"
+    },
+    {
+      q: "相比 v1.2.0，测试用例数量如何变化？",
+      opts: [
+        "151 → 321（+170）",
+        "36 → 48（+12）",
+        "100 → 200",
+        "321 → 151"
+      ],
+      a: 0,
+      why: "测试文件 36→48（+12），测试数 151→321（+170，×2.1）。36→48 是文件数变化，不是用例数。"
+    },
+    {
+      q: "全局行覆盖率（lines）从 v1.2.0 到 v2.0 的变化是？",
+      opts: [
+        "66.20% → 80.00%（达标）",
+        "61.41% → 66.20%（+4.79pp）",
+        "82.98% → 87.36%",
+        "49.42% → 57.52%"
+      ],
+      a: 1,
+      why: "lines 61.41%→66.20%；82.98%→87.36% 是分支覆盖率；49.42% 与 57.52% 分别是 processor 与 conflictResolver 单模块覆盖。80% 是目标而非已达成值。"
+    },
+    {
+      q: "本轮新增的三个 100% 覆盖模块是？",
+      opts: [
+        "EventRouter / apiProxy / knowledge",
+        "metrics / retry / cache",
+        "MergeGuard / failureMessages / MetricsCollector",
+        "server / processor / queue"
+      ],
+      a: 2,
+      why: "新增源文件为 src/review/merge-guard.ts、src/ai/failureMessages.ts、src/metrics/collector.ts，三个均为 100% 测试覆盖。EventRouter 是 v1.2.0 的产物。"
+    },
+    {
+      q: "审计结论中 P0（阻塞）项的数量是？",
+      opts: ["0", "1", "3", "6"],
+      a: 0,
+      why: "审计 P0 表明确：构建、类型检查、测试全部通过，P0-01 为「无」。6 是 critical review 的 CRITICAL 数量。"
+    },
+    {
+      q: "审计给出的整体安全评级是？",
+      opts: ["A+", "A-", "B+", "B"],
+      a: 1,
+      why: "凭据隔离 A、注入防护 A、快照脱敏 B+、密钥脱敏 A、子进程安全 B，综合 A-。B 是子进程安全的单项评级。"
+    },
+    {
+      q: "Critical review 的最终结论（verdict）是？",
+      opts: [
+        "Approve（直接通过）",
+        "Block（阻塞发布）",
+        "Needs Discussion（需讨论）",
+        "No Action Needed"
+      ],
+      a: 2,
+      why: "结论「Needs Discussion」：无即时可利用或数据破坏性缺陷，但多项真实缺陷需在下一版本前解决。"
+    },
+    {
+      q: "Critical review 标记的核心缺陷类型是？",
+      opts: [
+        "已定义但未接入生产路径的死代码（MergeGuard / MetricsCollector / failureMessages）",
+        "数据库迁移脚本失败",
+        "认证绕过漏洞",
+        "全局性能瓶颈"
+      ],
+      a: 0,
+      why: "C1/C2/C3 均为「模块有定义、有测试、零生产 import」；审计侧对应 P1-01/02/03。Security 评审确认当前部署无可利用漏洞。"
+    },
+    {
+      q: "C5 描述的 require_approval 策略绕过场景是？",
+      opts: [
+        "审查结果缓存未经校验被直接复用",
+        "API 限流被绕过导致配额耗尽",
+        "冲突修复在管理员审批通过前启动，可能提前推提交并合并 PR",
+        "Webhook 签名校验被弱化"
+      ],
+      a: 2,
+      why: "processor.ts 中冲突资格判定硬编码 reviewPassed:true，require_approval 下 admin 审批前冲突修复即可推进。修复建议为冲突资格加 requiresAdminApproval 守卫。"
+    },
+    {
+      q: "下列哪项属于「已定义但本轮未落地」的里程碑？",
+      opts: [
+        "M0-3：r2 测试覆盖 100%",
+        "M2-2：MetricsCollector 已实现",
+        "M0-8：集成测试（依赖 testcontainers / MinIO 基础设施）",
+        "M1-1：withRetry 智能重试"
+      ],
+      a: 2,
+      why: "M0-8 因需 testcontainers/MinIO 基础设施而暂缓。M0-3、M2-2、M1-1 均已落地。"
+    }
+  ];
+
+  var body = document.getElementById("quiz-body");
+  var pbAnswered = document.getElementById("qp-answered");
+  var pbCorrect = document.getElementById("qp-correct");
+  var btnSubmit = document.getElementById("btn-submit");
+  var verdictPanel = document.getElementById("verdict-panel");
+  var verdictTitle = document.getElementById("verdict-title");
+  var verdictDetail = document.getElementById("verdict-detail");
+  var btnReset = document.getElementById("btn-reset");
+
+  var state = { answered: 0, correct: 0, done: new Array(QUESTIONS.length).fill(false) };
+
+  function updateProgress() {
+    pbAnswered.textContent = String(state.answered);
+    pbCorrect.textContent = String(state.correct);
+  }
+
+  function render() {
+    body.textContent = "";
+    QUESTIONS.forEach(function (item, qi) {
+      var wrap = document.createElement("div");
+      wrap.className = "q-item";
+
+      var no = document.createElement("div");
+      no.className = "q-no";
+      no.textContent = "Q" + (qi + 1) + " / 10";
+      wrap.appendChild(no);
+
+      var stem = document.createElement("p");
+      stem.className = "q-stem";
+      stem.textContent = item.q;
+      wrap.appendChild(stem);
+
+      var opts = document.createElement("div");
+      opts.className = "q-opts";
+
+      item.opts.forEach(function (opt, oi) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "q-opt";
+        btn.setAttribute("aria-label", "选项 " + "ABCD"[oi] + ": " + opt);
+
+        var key = document.createElement("span");
+        key.className = "opt-key";
+        key.textContent = "ABCD"[oi];
+        var txt = document.createElement("span");
+        txt.textContent = opt;
+
+        btn.appendChild(key);
+        btn.appendChild(txt);
+        opts.appendChild(btn);
+
+        btn.addEventListener("click", function () {
+          if (state.done[qi]) return;
+          state.done[qi] = true;
+          state.answered += 1;
+          var isCorrect = oi === item.a;
+          if (isCorrect) state.correct += 1;
+
+          opts.querySelectorAll(".q-opt").forEach(function (b2, bi) {
+            b2.disabled = true;
+            if (bi === item.a) { b2.classList.add("correct"); }
+            else if (bi === oi && !isCorrect) { b2.classList.add("wrong"); }
+            else { b2.classList.add("dim"); }
+          });
+
+          var fb = document.createElement("div");
+          fb.className = "q-feedback";
+          if (isCorrect) {
+            fb.innerHTML = "<b style='color:var(--gain)'>正确。</b> " + item.why;
+          } else {
+            fb.innerHTML = "<b style='color:var(--bad)'>错误。正确答案是 " + "ABCD"[item.a] + "。</b> " + item.why;
+          }
+          wrap.appendChild(fb);
+
+          updateProgress();
+          if (state.answered === QUESTIONS.length) {
+            btnSubmit.disabled = false;
+            btnSubmit.focus({ preventScroll: true });
+          }
+        });
+      });
+
+      wrap.appendChild(opts);
+      body.appendChild(wrap);
+    });
+    updateProgress();
+  }
+
+  function showVerdict() {
+    verdictPanel.classList.add("show");
+    var pass = state.correct >= PASS_THRESHOLD;
+    verdictPanel.classList.toggle("pass", pass);
+    verdictPanel.classList.toggle("fail", !pass);
+    if (pass) {
+      verdictTitle.textContent = "通过 · " + state.correct + " / 10";
+      verdictDetail.textContent = "已达 80% 通过线，说明已掌握 v2.0 迭代的核心内容：测试规模翻倍、覆盖率走势、审计 P0=0 与安全 A-、critical review 的死代码/竞态发现。记录并行项目可推进。";
+    } else {
+      verdictTitle.textContent = "未通过 · " + state.correct + " / 10";
+      verdictDetail.textContent = "需答对 ≥" + PASS_THRESHOLD + " 题（80%）才视为通过。建议重读「变更记录」与「审计/评审发现」两节后重新答题。";
+    }
+    verdictPanel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  btnSubmit.addEventListener("click", showVerdict);
+
+  btnReset.addEventListener("click", function () {
+    state = { answered: 0, correct: 0, done: new Array(QUESTIONS.length).fill(false) };
+    verdictPanel.classList.remove("show", "pass", "fail");
+    btnSubmit.disabled = true;
+    render();
+    window.scrollTo({ top: document.getElementById("quiz").offsetTop - 74, behavior: "smooth" });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

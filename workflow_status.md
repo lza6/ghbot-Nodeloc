@@ -14,6 +14,7 @@
 | npm test | ✅ 321 tests / 321 pass / 0 fail |
 | npm run build | ✅ dist/ 构建成功 |
 | 覆盖率 | 66.20% lines / 87.36% branches / 75.57% functions |
+| 审计报告 | ✅ docs/audit-v2-final.md 已生成（含盲点扫描、安全评审、架构评审、测试评审） |
 
 ## 测试规模增长
 
@@ -29,11 +30,11 @@
 
 ### 源文件（新模块）
 
-| 文件 | 功能 | 覆盖 |
-|------|------|------|
-| `src/ai/failureMessages.ts` | 失败分类与告警文案 | 100% |
-| `src/review/merge-guard.ts` | 合并防重入锁 | 100% |
-| `src/metrics/collector.ts` | Actions 运行指标收集器 | 100% |
+| 文件 | 功能 | 覆盖 | 生产接入 |
+|------|------|------|---------|
+| `src/ai/failureMessages.ts` | 失败分类与告警文案 | 100% | ❌ 未接入 |
+| `src/review/merge-guard.ts` | 合并防重入锁 | 100% | ❌ 未接入 |
+| `src/metrics/collector.ts` | Actions 运行指标收集器 | 100% | ❌ 未接入 |
 
 ### 测试文件（新）
 
@@ -62,9 +63,10 @@
 | M0-6 | conflict-resolver 测试（56.56%→57.52%） | ✅ |
 | M0-7 | processor 测试（49.08%→49.42%） | ✅ |
 | M1-1 | withRetry 智能重试（抖动+总超时） | ✅ |
-| M1-3 | MergeGuard 合并防重入 | ✅ |
-| M1-4 | failureMessages 失败分类 | ✅ |
-| M2-2 | MetricsCollector 指标收集器 | ✅ |
+| M1-3 | MergeGuard 合并防重入（定义+测试） | ✅ 定义完成，待接入生产代码 |
+| M1-4 | failureMessages 失败分类（定义+测试） | ✅ 定义完成，待接入生产代码 |
+| M2-2 | MetricsCollector 指标收集器（定义+测试） | ✅ 定义完成，待接入生产代码 |
+| 审计 | 完整审计报告 | ✅ docs/audit-v2-final.md |
 
 ## 未落地项
 
@@ -77,8 +79,18 @@
 | M3 | 大文件拆分（processor/conflictResolver） | 单独里程碑 |
 | M4-M7 | 后续里程碑 | 逐步推进 |
 
+## 审计发现摘要（详见 docs/audit-v2-final.md）
+
+| 类别 | 计数 | 关键项 |
+|------|------|--------|
+| P0 | 0 | 无阻塞项 |
+| P1 | 8 | MergeGuard/failureMessages/MetricsCollector 未接入、processor.ts 1736行、conflictResolver.ts 1250行、覆盖率不足、waitForMergeable 无超时、无陈旧检测 |
+| P2 | 10 | sanitization 排除清单不完整、webhook 队列无持久化、分页缺失等 |
+| P3 | 10 | 分片审查、AI Provider 抽象、国际化等 |
+
 ## 下一阶段建议
 
-1. 先提交当前成果（v2.0-alpha），推送到 origin
-2. 第二阶段处理 processor.ts 拆分（M3），再补 M1-2 陈旧检测
-3. 第三阶段做集成测试（M0-8）
+1. 先提交当前成果，推送到 origin
+2. **第二阶段**：接入 3 个新模块到生产代码（MergeGuard→processor.ts, failureMessages→gooseCli.ts, MetricsCollector→runReview.ts）
+3. **第三阶段**：拆分 processor.ts 和 conflictResolver.ts（M3），再补 M1-2 陈旧检测
+4. **第四阶段**：做集成测试（M0-8）
