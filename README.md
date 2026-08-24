@@ -1,290 +1,171 @@
 # ghbot
 
-[中文文档](README-zh.md)
+> 一个 GitHub Actions 机器人，让 AI 自动审核 Pull Request、分类 Issue、检测重复、回答代码问题、解决冲突、按策略合并。
 
-GitHub Actions bot that uses goose to review pull requests, triage issues and pull requests, flag likely duplicates, answer repository-aware PR questions, and optionally merge approved changes.
+## 第一性原理：为什么需要 ghbot？
 
-## Pull request review
+**问题本质**：代码审查是人类协作中最耗时也最容易被跳过的环节。审查者没时间、贡献者等太久、合并后才发现问题——这是所有团队的通用痛点。
 
-goose returns exactly four sections:
+**核心矛盾**：代码审查需要"完整理解上下文"和"逐行检查逻辑"，这两件事恰好是当代 LLM 最擅长的；但 LLM 需要被安全地接入到代码仓库的审查流程中，不能直接给它写权限。
 
-- `review`: concrete non-blocking inline review notes.
-- `change`: required inline changes that block merge.
-- `comment`: an overall comment for the pull request author.
-- `result`: the maintainer-facing merge decision, summary, and malicious-code close decision.
+**ghbot 的解法**：把 LLM（goose）嵌入到 GitHub Actions 的标准审查流水线中，用 GitHub 自身的权限系统做安全边界，让 AI 只读分析、不写代码、不触碰密钥。审查通过后，是否合并、何时合并、谁批准——仍然由仓库策略决定。
 
-Only `change` is always a required change. How ordinary `review` notes affect merge is configured with `REVIEW_POLICY`:
+**一句话**：ghbot = 一个能看懂代码的机器人助手，帮你做代码审查的苦活累活，但钥匙在你手里。
 
-- `allow`: review notes do not block merge. A clean result is submitted as `APPROVE`.
-- `require_approval`: review notes are submitted as `COMMENT`; the `ghbot review` check remains `action_required` until a repository administrator approves the current head commit.
-- `reject`: any review note is submitted as `REQUEST_CHANGES` and blocks merge.
+---
 
-The default is `allow`. Required changes and malicious code block under every policy. Clearly malicious pull requests can be commented on and closed automatically. Start with `AUTO_MERGE=false` until the review behavior is trusted.
+## 核心功能
 
-### Repository-specific rules
+### PR 自动审查
 
-Use repository Actions variables to customize a caller repository:
+goose 的审查结果固定包含四个字段：
 
-- `REVIEW_INSTRUCTIONS`: additional repository-specific review requirements, such as testing, compatibility, architecture, or release rules.
-- `REVIEW_BRANCHES`: comma-separated base-branch globs. Empty reviews all target branches. Example: `main,develop,release/**`.
-- `REVIEW_STRICTNESS`: `normal` by default, or `strict` for a thorough repository-policy review. Normal mode avoids nitpicks and reports only clear runtime, build, test, security, data-loss, or important user-facing regressions.
-- `MAX_PATCH_CHARS`: maximum total patch text sent for review; default `120000`.
-- `GHBOT_RUNTIME_DIR`: optional writable runtime root for `.ghbot-tmp`, `.ghbot-cache`, and repository knowledge files; defaults to the process working directory.
+- **`review`**：普通审查意见，不强制阻止合并。
+- **`change`**：必须修复后才能合并的阻塞性问题。
+- **`comment`**：面向 PR 作者的整体评价和总结。
+- **`result`**：面向维护者的合并结论、摘要和恶意代码判断。
 
-`REVIEW_BRANCHES` matches the pull request's target (base) branch. `*` does not cross `/`; `**` does. The workflow file must be present on the repository's default branch for `pull_request_target`, but that does not limit reviews to PRs targeting the default branch. A workflow installed on `main` can review PRs targeting `develop` or release branches. The bot fetches each PR and its diff by PR number and never executes code from the PR head.
+`change` 在任何策略下都阻止合并。普通 `review` 如何影响合并由 `REVIEW_POLICY` 决定：
 
-To make `require_approval` or `reject` prevent manual merges, add the `ghbot review` check as a required status check in the target branch's ruleset or branch protection settings. Without that repository rule, ghbot still reports `action_required`, but GitHub may allow an administrator or collaborator to merge manually.
+| 策略 | 行为 |
+|------|------|
+| `allow`（默认） | 允许存在普通审查意见，干净时自动 APPROVE |
+| `require_approval` | 审查意见不阻止合并，但 `ghbot review` check 保持 `action_required`，需要管理员批准 |
+| `reject` | 只要有审查意见就提交 REQUEST_CHANGES 并阻止合并 |
 
-### Incremental review cache in Cloudflare R2
+如果模型识别到后门、凭证窃取、恶意持久化、破坏命令或供应链攻击，机器人会评论原因并自动关闭 PR。普通 bug、测试失败或可疑但无法证明恶意的代码不会触发自动关闭。
 
-When Cloudflare R2 is configured, each successful review stores this metadata in the private bucket:
+### Issue/PR 自动分类
 
-- repository and PR number
-- reviewed head SHA and timestamp
-- the structured `review/change/comment/result` output
+在 Issue 或 PR 的 `opened` / `edited` / `reopened` 事件中，ghbot 可以：
+- 从配置的白名单中选择并添加标签
+- 检测可能的重复项（Issue 只和 Issue 比，PR 只和 PR 比）
+- 对高度可能的重复项评论候选链接
+- 仅在置信度为 `likely` 时添加 `duplicate` 标签
 
-When a new commit triggers `synchronize`, or PR metadata/base changes trigger `edited`, the latest cache for that PR is restored. goose receives an earlier-head result plus the current complete PR patch, revalidates old findings, removes fixed findings, and checks the newest content. The previous merge decision is never reused without a fresh review. An `edited` event on the same head still runs a fresh complete review so title, description, and base-branch changes are respected.
+PR 重复检测分两阶段：先粗筛候选，再细读 commits、评论和 review 做最终判断。
 
-For every `synchronize` event, ghbot posts a commit-scoped progress comment when review starts and updates that same comment when the run completes, fails, or becomes stale because the PR changed again. After the new review is published successfully, ghbot marks inline `review` and `change` threads from earlier bot reviews as resolved and minimizes those resolved comments, dismisses any earlier active bot decision, and reduces its old summary to a superseded marker. If GitHub cannot expose a legacy thread through GraphQL, ghbot deletes only that unmappable inline comment as a fallback. GitHub does not allow a submitted review record itself to be deleted, so the newest review is the only full and active automated result.
+### @bot PR 对话
 
-Objects are isolated by repository ID and PR number. `latest.json` accelerates the next review, while `reviews/<head-sha>.json` preserves each successful head result. Closing or merging a PR does not proactively delete these objects. Cache data contains no API keys, full diff, or prompt.
+在 PR 中评论 `@bot` 即可提问。Goose Agent 在一次性 Docker 容器中运行，可以读代码、搜索、执行命令，但拿不到任何密钥，也不能 push。只有 write 及以上权限的用户可触发。
 
-Configure all of these together:
+### 自动冲突修复
 
-- Actions secrets: `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
-- Repository variables: `R2_ENDPOINT`, `R2_BUCKET_NAME`
-- Optional repository variable: `R2_PREFIX`, a safe object-key namespace such as `forum-114614`
+设置 `AUTO_RESOLVE_CONFLICTS=true` 后，如果 AI 审核通过但 GitHub 报告冲突，goose 可以自动解决。也支持 `/conflict` 命令手动触发。
 
-Use a dedicated R2 token limited to read/write objects in this bucket. ghbot validates restored content and repository/PR identity before using it. R2 credentials are available only to the host process and are never forwarded to goose containers, PR validation commands, or git subprocesses. If R2 is absent or temporarily unavailable, review continues without persistent history.
+### 增量审查缓存（Cloudflare R2）
 
-### Self-improving repository knowledge cache
+配置 R2 后，每次成功审查的结果会保存到私有的 S3 兼容存储桶。新 commit 触发 `synchronize` 时，goose 会收到旧审查结果和当前完整 diff，增量验证——已修复的问题不再重复报，新 commit 引入的回归单独检查。旧的合并结论不会直接复用。
 
-ghbot can retain a concise repository knowledge file in the same private R2 bucket. It is isolated by repository ID and separate from each PR review cache, so it survives PR close and merge events. Automatic review can use durable facts such as architecture, supported environments, trusted validation commands, conventions, and recurring pitfalls.
+---
 
-- `REPOSITORY_KNOWLEDGE_ENABLED`: restore and use repository knowledge; default `true`.
-- `REPOSITORY_KNOWLEDGE_WRITE`: allow an authorized `@bot` goose Agent to improve the cached knowledge; default `false`.
+## 快速开始
 
-The Agent edits only a scratch copy at `.ghbot/repository-knowledge.md`. ghbot validates the result, rejects credentials/private keys and content over 32 KiB, then persists the runtime copy to a repository-scoped R2 object. It is never committed to the caller repository, and the Agent receives neither GitHub nor R2 credentials.
+### 1. 添加 Workflow
 
-## Issue and PR triage
-
-On `issues` and `pull_request_target` open/edit/reopen events, ghbot can:
-
-- apply one or more labels from the configured allowlist
-- compare an issue only with other issues, and a PR only with other PRs
-- comment with a possible or likely duplicate and a link to the earlier item
-- add the duplicate label only for a high-confidence (`likely`) match
-
-PR duplicate detection runs in two stages: a coarse title/body pass selects at most three plausible candidates, then a detailed pass compares the target and candidates using their recent commits, conversation comments, review summaries, and inline review comments. A duplicate is reported only after the detailed pass. Issue duplicate detection remains single-stage.
-
-The bot does not automatically close duplicates. Duplicate comments contain a hidden marker so repeated triage does not post the same candidate twice. Human labels outside the configured managed label set are preserved.
-
-Triage variables:
-
-- `TRIAGE_ENABLED`: default `true`.
-- `TRIAGE_LABELS`: default `bug,enhancement,documentation,question,maintenance`.
-- `TRIAGE_DUPLICATE_LABEL`: default `duplicate`.
-- `TRIAGE_CANDIDATE_LIMIT`: recent same-type items supplied to goose, default `50`, maximum `100`.
-- `TRIAGE_INSTRUCTIONS`: optional repository-specific classification rules.
-
-Missing configured labels are created automatically.
-
-## PR comment chat
-
-Mention `@bot` in a pull request conversation to ask about the current PR. The configured `BOT_NAME` is also accepted as a mention; for example, `BOT_NAME=github-actions[bot]` accepts both `@github-actions` and `@github-actions[bot]`. Because this agent can execute commands, only repository collaborators with `write`, `maintain`, or `admin` permission may invoke it.
-
-When someone without that permission tries `@bot`, `/recheck`, or `/conflict`, ghbot posts a visible reply explaining the required permission and asks them to contact a maintainer. The response is keyed to the source comment so rerunning the workflow does not duplicate it.
-
-This restriction does not affect automatic review. Pull requests from forks and contributors without repository access still receive the normal `review/change/comment/result` review on every configured PR event. When an external contributor needs repository-agent investigation, a maintainer can mention `@bot` on that contributor's PR; the agent then analyzes the contributor's current PR head in isolation and posts the answer to the same conversation.
-
-ghbot checks out the current PR head without persisted GitHub credentials and gives goose a sanitized temporary snapshot plus the PR title, description, branches, and bounded complete diff. goose runs in a dedicated disposable Docker container with the built-in Developer extension enabled in automatic mode. It can execute commands and tests, edit the temporary workspace, install dependencies, and use the network, but the container mounts only the sanitized PR snapshot and receives no GitHub token, GitHub App credentials, or real goose API key. A short-lived local proxy exchanges the container's one-run token for the real provider credential and closes with the container. The agent cannot commit or push, and resource/time limits still apply. The named container is forcibly removed on success, failure, or timeout.
-
-The snapshot excludes Git metadata, repository goose/OpenCode/agent instruction files, `.env`, and symbolic links, then is deleted after the reply. This prevents PR-controlled agent configuration and common credential paths from entering the agent workspace; the container boundary protects the Actions runner and ghbot runtime while preserving full permissions inside the analysis environment.
-
-Replies are keyed to the source comment so a workflow rerun does not post the same answer twice, and bot-authored replies are ignored to prevent loops.
-
-The Agent replies in the language of the latest user comment: English questions receive English answers and Chinese questions receive Chinese answers, regardless of the language used by the PR or repository files.
-
-The prompt also receives host-verified requester context: the commenter's login, whether they authored the PR, their repository permission level, and a derived actor category. This context can tailor the answer but cannot override security rules. Users without `write`, `maintain`, or `admin` permission still do not start the tool-enabled Agent.
-
-When repository knowledge writing is enabled, the Agent may improve its scratch knowledge file only with verified, durable repository facts. Repositories evolve, so it must revise or delete entries that current code, tests, or configuration prove outdated, replaced, contradictory, or no longer true instead of only appending history. Temporary PR conclusions, speculative claims, credentials, personal data, and instructions that weaken security are forbidden. Current repository evidence always takes precedence over cached knowledge.
-
-## Optional GitHub App webhook mode
-
-Action mode remains the default and is complete without a webhook service. `WEBHOOK_ENABLED=false` by default, so existing workflows, review triggers, `/recheck`, `/conflict`, triage, and tool-enabled PR chat continue to use GitHub Actions exactly as before.
-
-Enable webhook mode only when you also run a long-lived Node process or the included `Dockerfile.webhook`. It receives GitHub App webhook events and answers `@bot` mentions in Issue/PR conversation comments, review comments, and submitted reviews. It is useful when the App is installed once for an organization and you want those repositories to share one endpoint. The App must be installed on each repository (or the organization selection must include it); a webhook cannot access repositories where the installation has no access.
-
-Configure the GitHub App webhook URL as `https://your-host/webhooks/github`, and configure `WEBHOOK_SECRET` as a separate long random HMAC secret in both GitHub App webhook settings and the service environment. Never reuse the public URL as the secret. Subscribe to `Issue comments`, `Pull request review comments`, and `Pull request reviews`. The App needs `Metadata: read`, `Issues: read and write`, and `Pull requests: read and write`. The endpoint exchanges each payload's `installation.id` for the correct short-lived installation token, so one fixed installation ID must not be used for all repositories.
-
-Set these service environment variables:
-
-- `WEBHOOK_ENABLED=true` to opt in; the default is `false`.
-- `WEBHOOK_SECRET` and optional `WEBHOOK_PATH` (default `/webhooks/github`).
-- `BOT_NAME`: the App login or slug accepted in mentions, for example `forumlify[bot]` accepts both `@forumlify` and `@forumlify[bot]`; `@bot` is always accepted.
-- `WEBHOOK_CHAT_PERMISSION`: `read` (default), `write`, or `anyone`. On organization-owned repositories, `read` also allows organization members without adding each member as a repository collaborator; personal repositories and non-members continue through the repository collaborator check. `write` allows write, maintain, or admin; `anyone` skips the commenter permission check but still only works in App-installed repositories. The App should have organization-level `Members: read` permission so private organization membership can be verified.
-- `WEBHOOK_QUEUE_CONCURRENCY` and `WEBHOOK_QUEUE_LIMIT` bound background work and memory.
-
-Start it with `npm run build && npm run webhook`, or build and run the Docker image:
-
-```bash
-docker build -f Dockerfile.webhook -t ghbot-webhook .
-docker run --rm -p 3000:3000 \\
-  -e WEBHOOK_ENABLED=true \\
-  -e WEBHOOK_SECRET='replace-with-a-long-random-secret' \\
-  -e GH_APP_ID='123456' \\
-  -e GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \\
-  -e GOOSE_API_KEY="$GOOSE_API_KEY" \\
-  ghbot-webhook
-```
-
-Keep TLS termination in a reverse proxy or managed ingress; the Node service listens on `PORT` (default `3000`). `GET /healthz` is available for service probes and `GET /metrics` exposes Prometheus text metrics. GitHub receives `202` before Goose runs because a review-quality model call can exceed GitHub's webhook timeout. Failed background work is retried in-process once; a process crash after `202` is **not** redelivered by GitHub. Use Action mode for durable `/recheck`, `/conflict`, and tool-enabled chat. Webhook chat is best-effort. Deliveries are HMAC-verified and deduplicated by `X-GitHub-Delivery`.
-
-Webhook chat is deliberately read-only: Goose receives repository metadata, README, Issue/PR text, bounded diffs, and recent discussion, but no repository tools or credentials. It cannot edit code, run commands, push commits, run `/recheck`, or run `/conflict`; use Action mode for those operations. Replies follow the language of the latest comment and include no provider or GitHub secrets. Leaving `WEBHOOK_ENABLED` unset preserves the normal Action-only deployment.
-
-## Automatic conflict resolution
-
-Set `AUTO_RESOLVE_CONFLICTS=true` to allow goose to repair a PR that passed review but GitHub reports as `mergeable=false` with `mergeable_state=dirty`. This is independent of `AUTO_MERGE`; conflict repair can be enabled while automatic merging remains disabled.
-
-A collaborator with `write`, `maintain`, or `admin` permission can also explicitly request the same guarded repair by posting the exact command `/conflict`. This manual command works even when `AUTO_RESOLVE_CONFLICTS=false`; it does not require an earlier passing review because the resulting commit always triggers a new complete review before any merge decision.
-
-Automatic conflict repair applies to current same-repository PR heads. External fork commits remain API-only during `pull_request_target`; a maintainer can explicitly run `/conflict` when the contributor enabled **Allow edits from maintainers**. That trusted comment workflow checks out the PR head without persisted credentials and pushes with an explicit `--force-with-lease` tied to the reviewed head SHA, so a newly pushed contributor commit is never overwritten. Stale heads, non-dirty states, disabled maintainer edits, and failed reviews are skipped. ghbot creates the merge locally, gives goose a sanitized credential-free snapshot, and allows it to change direct conflict files plus related callers, types, tests, lockfiles, configuration, or documentation when necessary for compatibility. Protected agent/configuration and credential paths are rejected.
-
-After applying the proposed files, ghbot verifies there are no unmerged paths and runs `git diff --check` only on AI-touched files. When configured, a credential-free validation container mounts the candidate read-only, copies it to a disposable workspace, and runs `CONFLICT_TEST_COMMAND` there. Infrastructure failures are reported directly instead of being sent to goose as code-repair requests; a genuine merge-related validation failure permits one focused edit pass followed by one authoritative host rerun. A separate tool-free goose prompt then performs the final read-only staged-diff confirmation. The result is committed and pushed only when that confirmation returns `safeToCommit=true` and the remote PR head still matches the reviewed SHA. Same-repository heads use a normal push; external forks use the SHA-pinned force lease described above. The new commit triggers a fresh `synchronize` review; the old decision is not reused as approval.
-
-## goose configuration
-
-Required provider secret (one of these aliases must be supplied when a review or Goose operation runs):
-
-- `GOOSE_API_KEY` (preferred)
-- `OPENCODE_API_KEY` (migration fallback alias)
-
-Repository variables:
-
-- `GOOSE_BASE_URL`: OpenAI-compatible base URL; default `https://api.openai.com/v1`.
-- `GOOSE_MODEL`: default `gpt-5.4`.
-- `GOOSE_THINKING_EFFORT`: `off`, `low`, `medium`, `high`, or `max`; default `high` in the workflow.
-
-The workflow installs the pinned goose CLI `v1.46.0`. Review and triage run without extensions in chat mode against the OpenAI-compatible `/v1/chat/completions` API. It invokes:
-
-```text
-goose run --no-session --no-profile --quiet --output-format json --provider openai --model <model> --text <prompt>
-```
-
-The goose process gets isolated home/config/data/state directories, disables profiles and repository context files, and uses `GOOSE_MODE=chat` for automatic review and triage so no tools can run. Authorized PR comment chat and the two conflict-resolution passes use the Developer extension inside disposable containers.
-
-For migration, the runtime and workflows still accept `OPENCODE_API_KEY`, `OPENCODE_BASE_URL`, `OPENCODE_MODEL`, and `OPENCODE_REASONING_EFFORT` as fallback aliases. New repositories should use the `GOOSE_*` names.
-
-## GitHub authentication and permissions
-
-The workflow always receives `github.token`, so no `GITHUB_TOKEN` repository secret is needed. ghbot optionally prefers a GitHub App installation token and falls back to the workflow token when App authentication fails. The goose provider key remains a separate secret.
-
-Workflow permissions:
-
-- `contents: write`: optional merge and repository operations.
-- `pull-requests: write`: list PRs, create reviews, and merge.
-- `issues: write`: list issues/PRs, add labels, create labels, and post comments.
-- `checks: write`: publish and update the `ghbot review` check.
-- `statuses: read`: verify commit statuses before auto-merge.
-
-For a GitHub App, configure these repository permissions:
-
-- Contents: read and write
-- Pull requests: read and write
-- Issues: read and write
-- Checks: read and write
-- Commit statuses: read-only
-- Metadata: read-only
-- Workflows: read and write only if conflict resolution may update workflow files
-
-Add App credentials as optional repository secrets:
-
-- `GH_APP_ID`
-- `GH_APP_PRIVATE_KEY`
-- `GH_APP_INSTALLATION_ID` (optional; ghbot can resolve it)
-
-GitHub Actions secret names cannot start with `GITHUB_`, so use the `GH_APP_*` names above.
-
-## Reuse from another repository
-
-Create a workflow on the caller repository's default branch. A complete wrapper is available in [.github/workflows/review.yml](.github/workflows/review.yml); the central reusable workflow is:
-
-```text
-lezi-fun/ghbot/.github/workflows/review-reusable.yml@main
-```
-
-The caller must forward `issues`, `pull_request_target`, `issue_comment`, `pull_request_review`, and optional schedule events, declare the permissions above, and pass:
+调用仓库的默认分支上创建 `.github/workflows/review.yml`：
 
 ```yaml
-secrets:
-  GOOSE_API_KEY: ${{ secrets.GOOSE_API_KEY }}
-  GH_APP_ID: ${{ secrets.GH_APP_ID }}
-  GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
-  GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
-  R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+name: ghbot review
+on:
+  issues:
+    types: [opened, edited, reopened]
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted]
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  review:
+    uses: lezi-fun/ghbot/.github/workflows/review-reusable.yml@main
+    secrets:
+      GOOSE_API_KEY: ${{ secrets.GOOSE_API_KEY }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      checks: write
+      statuses: read
 ```
 
-See the checked-in wrapper for all `with:` inputs and repository-variable mappings.
+### 2. 配置环境变量
 
-## Manual recheck
+在仓库的 Settings → Secrets and variables → Actions 中设置：
 
-An eligible repository user can comment:
+| 密钥 | 说明 |
+|------|------|
+| `GOOSE_API_KEY` | OpenAI / 兼容 provider 的 API key |
 
-```text
-/recheck
-```
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `REVIEW_POLICY` | 审查策略：allow / require_approval / reject | `allow` |
+| `REVIEW_STRICTNESS` | 严格度：normal / strict | `normal` |
+| `REVIEW_BRANCHES` | 目标分支 glob，逗号分隔 | 全部 |
+| `AUTO_MERGE` | 是否自动合并通过审查的 PR | `false` |
+| `AUTO_RESOLVE_CONFLICTS` | 是否自动解决冲突 | `false` |
+| `GOOSE_MODEL` | 使用的模型 | `gpt-5.4` |
+| `MAX_PATCH_CHARS` | 发送给模型的最大 patch 字符数 | `120000` |
 
-The bot reruns the complete current PR review using the repository's configured `REVIEW_STRICTNESS`. Only users with `write`, `maintain`, or `admin` permission can request it. The old `/lenient-check` command is no longer accepted.
+---
 
-## Manual conflict repair
+## 开发门禁
 
-An eligible repository user can comment the exact command:
-
-```text
-/conflict
-```
-
-The bot attempts conflict repair only when GitHub reports the current open PR as conflicted and the head is writable. External forks require **Allow edits from maintainers**; their resolved head is pushed with a force lease pinned to the reviewed SHA. It runs the same configured validation and separate final goose confirmation used by automatic repair, then pushes only if both succeed and the head has not changed.
-
-## Development gates
-
-All changes must pass the local gates before push; CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) enforces the same checks on GitHub:
+所有改动在推送前必须通过：
 
 ```bash
-npm run typecheck    # TypeScript strict check
-npm run lint         # ESLint (flat config)
-npm run format:check # Prettier formatting
-npm test             # node:test suite (currently 329 passing)
+npm run typecheck    # TypeScript 严格检查
+npm run lint         # ESLint
+npm run format:check # Prettier 格式检查
+npm test             # 329 个测试，全部通过
+npm run build        # 编译到 dist/
 ```
 
-The optional webhook service exposes `GET /healthz` and `GET /metrics` (Prometheus text format) for probes and dashboards. The production-hardening change ledger and quiz live at [docs/reports/ghbot-production-hardening.html](docs/reports/ghbot-production-hardening.html).
+## 当前版本: v2.0.0
 
-### v2.0 observability and reliability additions
+| 指标 | 值 |
+|------|------|
+| 测试数 | 329 / 329 全绿 |
+| 测试文件 | 55 |
+| 覆盖率 lines | ~66% |
+| 门禁 | typecheck ✅ lint ✅ format ✅ test ✅ build ✅ |
 
-v2.0 added three supporting modules and hardened the merge/review pipeline:
+### v2.0 新增
 
-- **`src/metrics/collector.ts`** — `MetricsCollector` for Actions runs (review duration, outcomes, goose calls, conflict resolutions, merge attempts, cache hits). `snapshot()` and `formatMarkdown()` render a GitHub-flavored summary table.
-- **`src/ai/failureMessages.ts`** — `categorizeFailure` (timeout / auth / rate_limit / network / model / validation / unknown) and `formatFailureMessage` produce actionable failure text; wired into the goose error path.
-- **`src/review/merge-guard.ts`** — in-process duplicate-merge prevention used around `pulls.merge`.
-- **`src/review/staleness.ts`** — `evaluateReviewStaleness` decides whether a head-sha change during a review should be appended or discarded.
-- **`src/github/errors.ts`** — shared `isNotFoundError` / `isAlreadyMergedError` helpers, replacing five local duplicates.
-- **`src/webhook/queueStore.ts`** — optional durable delivery queue (default off) so webhook tasks survive a process restart.
+- 智能重试（抖动 + 总超时 + 自定义重试谓词）
+- 合并防重入锁（MergeGuard）
+- 失败分类与告警（failureMessages）
+- 指标收集器（MetricsCollector）
+- 陈旧检测（审查期间 head 变化自动追加/丢弃）
+- 持久化队列（QueueStore，可选）
+- 共享错误工具（消除 5 处重复）
+- 完整审计报告 + 关键审查 + 交互式 HTML 报告
 
-These were introduced by the changes documented in [docs/audit-v2-final.md](docs/audit-v2-final.md) and [docs/report-v2.html](docs/report-v2.html).
+---
 
-## Local development
+## 安全设计
 
-```bash
-npm install
-npm run typecheck
-npm run build
-```
+- **凭据隔离**：GitHub token、R2 密钥、真实 API key 绝不进入 goose 容器
+- **PR 代码不执行**：自动审核只用 API diff，不 checkout 执行 PR 代码
+- **快照脱敏**：进入 Agent 工作区的快照排除 .git、.env、凭证文件
+- **auto-merge 保持 opt-in**：AUTO_MERGE=false 默认值不可改动
+- **推送防护**：fork 推送绑定 SHA 的 force-with-lease
 
-For local event simulation, install goose `v1.46.0` and export the variables in [.env.example](.env.example), plus `GITHUB_EVENT_NAME` and `GITHUB_EVENT_PATH`, then run:
+---
 
-```bash
-node dist/src/actions/runReview.js
-```
+## 文档索引
 
-Normal automatic review and triage use GitHub-provided diffs without executing PR code. When conflict resolution is explicitly enabled, PR code and the configured validation command run only inside sanitized disposable containers without GitHub credentials.
+| 文档 | 说明 |
+|------|------|
+| [docs/SOP.md](docs/SOP.md) | 标准操作流程（开发/部署/排障） |
+| [docs/audit-v2-final.md](docs/audit-v2-final.md) | 完整审计报告 |
+| [docs/critical-review-v2.md](docs/critical-review-v2.md) | 关键审查（C1-C6 全部修复） |
+| [docs/report-v2.html](docs/report-v2.html) | 交互式 HTML 报告（含 10 题测验） |
+| [docs/optimization-record.md](docs/optimization-record.md) | 优化验证记录 |
+| [docs/SOP.md](docs/SOP.md) | 标准操作流程 |
+| [spec/v2-finalization-spec.md](spec/v2-finalization-spec.md) | 规范文档 |
+| [tasks/plan.md](tasks/plan.md) | 实施计划 |
+| [tasks/todo.md](tasks/todo.md) | 任务清单 |
