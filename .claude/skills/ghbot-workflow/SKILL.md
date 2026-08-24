@@ -50,6 +50,7 @@ npm run ci:test                # node --import tsx --experimental-test-coverage 
 ### CI gate (`.github/workflows/ci.yml`)
 
 The CI workflow runs on every push/PR to main:
+
 1. `npm ci` — clean install
 2. `npm run typecheck` — strict type check
 3. `npm run lint` — ESLint
@@ -139,7 +140,8 @@ The review pipeline is: `GooseReviewer.review()` → `normalizeReviewDecision()`
 
 ```typescript
 // Example: add a new check for hardcoded credentials
-const newRule = "Check for hardcoded credentials (API keys, passwords, tokens) in the patch. Report as 'change' (blocking) when found in production code.";
+const newRule =
+  "Check for hardcoded credentials (API keys, passwords, tokens) in the patch. Report as 'change' (blocking) when found in production code.";
 ```
 
 2. **Update the output schema** — If the new finding needs a new field, update `reviewDecisionSchema` in `src/review/gooseReviewer.ts` and the `ReviewDecision` type in `src/types.ts`.
@@ -219,6 +221,7 @@ npm run typecheck && npm run lint && npm test && npm run build
 ### Continuous audit
 
 Update `workflow_status.md` after each milestone:
+
 - Mark completed items with ✅
 - Note remaining items with reasons
 - Track coverage, test count, and build passes
@@ -258,12 +261,14 @@ Update `workflow_status.md` after each milestone:
 ## [2.0.0] - 2026-08-24
 
 ### Added
+
 - feat: MergeGuard merge deduplication
 - feat: MetricsCollector for Actions runs
 - feat: failureMessages error categorization
 - feat: smart retry with jitter and total timeout
 
 ### Fixed
+
 - fix: normalizeKnowledge line ending normalization
 ```
 
@@ -283,6 +288,7 @@ gh release create v2.0.0 --title "v2.0.0" --notes "Release notes here"
 ```
 
 5. **Verify release**:
+
 - Check that `review.yml` workflow dispatches correctly
 - Verify the reusable workflow at the new tag works
 - Confirm CI passes on the release commit
@@ -299,16 +305,16 @@ gh release create v2.0.0 --title "v2.0.0" --notes "Release notes here"
 
 All config is defined in `src/config.ts` with Zod schema validation. Key environment variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GOOSE_API_KEY` | — | LLM API key for goose |
-| `GOOSE_MODEL` | `gpt-5.4` | Model name |
-| `REVIEW_POLICY` | `allow` | Review policy: allow/require_approval/reject |
-| `REVIEW_STRICTNESS` | `normal` | Review strictness: normal/strict |
-| `AUTO_MERGE` | `false` | Auto-merge on pass |
-| `AUTO_RESOLVE_CONFLICTS` | `false` | Auto-resolve merge conflicts |
-| `TRIAGE_ENABLED` | `true` | Enable issue/PR triage |
-| `WEBHOOK_ENABLED` | `false` | Enable webhook mode |
+| Variable                 | Default   | Description                                  |
+| ------------------------ | --------- | -------------------------------------------- |
+| `GOOSE_API_KEY`          | —         | LLM API key for goose                        |
+| `GOOSE_MODEL`            | `gpt-5.4` | Model name                                   |
+| `REVIEW_POLICY`          | `allow`   | Review policy: allow/require_approval/reject |
+| `REVIEW_STRICTNESS`      | `normal`  | Review strictness: normal/strict             |
+| `AUTO_MERGE`             | `false`   | Auto-merge on pass                           |
+| `AUTO_RESOLVE_CONFLICTS` | `false`   | Auto-resolve merge conflicts                 |
+| `TRIAGE_ENABLED`         | `true`    | Enable issue/PR triage                       |
+| `WEBHOOK_ENABLED`        | `false`   | Enable webhook mode                          |
 
 Full list in `.env.example` and `src/config.ts`.
 
@@ -316,23 +322,23 @@ Full list in `.env.example` and `src/config.ts`.
 
 ## Key Files
 
-| Path | Purpose |
-|------|---------|
-| `src/actions/router.ts` | Event routing and handler registration |
-| `src/actions/runReview.ts` | Actions entry point |
-| `src/review/processor.ts` | Core review orchestration |
-| `src/review/policy.ts` | Review policy evaluation |
-| `src/review/gooseReviewer.ts` | LLM review prompt + schema |
-| `src/review/conflictResolver.ts` | Merge conflict resolution |
-| `src/triage/processor.ts` | Issue/PR triage and duplicate detection |
-| `src/chat/processor.ts` | @bot chat in disposable containers |
-| `src/ai/gooseCli.ts` | Goose CLI and Docker wrappers |
-| `src/ai/apiProxy.ts` | One-time credential proxy |
-| `src/config.ts` | All env config with Zod validation |
-| `src/metrics/collector.ts` | Actions metrics collector |
-| `src/review/merge-guard.ts` | Merge deduplication guard |
-| `src/ai/failureMessages.ts` | Error categorization |
-| `docs/audit-v2-final.md` | Comprehensive audit report |
-| `workflow_status.md` | Milestone tracking |
-| `.github/workflows/ci.yml` | CI pipeline |
-| `.github/workflows/review.yml` | PR review workflow |
+| Path                             | Purpose                                 |
+| -------------------------------- | --------------------------------------- |
+| `src/actions/router.ts`          | Event routing and handler registration  |
+| `src/actions/runReview.ts`       | Actions entry point                     |
+| `src/review/processor.ts`        | Core review orchestration               |
+| `src/review/policy.ts`           | Review policy evaluation                |
+| `src/review/gooseReviewer.ts`    | LLM review prompt + schema              |
+| `src/review/conflictResolver.ts` | Merge conflict resolution               |
+| `src/triage/processor.ts`        | Issue/PR triage and duplicate detection |
+| `src/chat/processor.ts`          | @bot chat in disposable containers      |
+| `src/ai/gooseCli.ts`             | Goose CLI and Docker wrappers           |
+| `src/ai/apiProxy.ts`             | One-time credential proxy               |
+| `src/config.ts`                  | All env config with Zod validation      |
+| `src/metrics/collector.ts`       | Actions metrics collector               |
+| `src/review/merge-guard.ts`      | Merge deduplication guard               |
+| `src/ai/failureMessages.ts`      | Error categorization                    |
+| `docs/audit-v2-final.md`         | Comprehensive audit report              |
+| `workflow_status.md`             | Milestone tracking                      |
+| `.github/workflows/ci.yml`       | CI pipeline                             |
+| `.github/workflows/review.yml`   | PR review workflow                      |

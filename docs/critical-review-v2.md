@@ -49,19 +49,23 @@ The codebase uses a large number of small, focused files, consistent error handl
 
 **File**: `src/review/processor.ts`, lines 1347-1351
 **Code**:
+
 ```typescript
 .sort(
   (left, right) => Date.parse(right.started_at ?? "") - Date.parse(left.started_at ?? "")
 )
 ```
+
 **Issue**: `Date.parse("")` returns `NaN`. `NaN - NaN` is `NaN`. The `Array.prototype.sort()` comparator must return a number — a `NaN` return value breaks the sort implementation, producing undefined behavior (the array may be in any order, or the sort may throw on some engines).
 
 **Failure scenario**: Any check run in the list where `started_at` is `null` or `undefined` causes the comparator to return `NaN` for that pair. The function then selects the wrong check run (or none) via `[0]`, potentially causing `markReviewCheckApproved` to:
+
 - Update the wrong check run
 - Throw `"Could not find ghbot review check"` if the wrong element is selected
 - Silently skip the admin approval update
 
 **Fix**: Use a deterministic fallback:
+
 ```typescript
 .sort((left, right) => {
   const lt = left.started_at ? Date.parse(left.started_at) : 0;
@@ -74,6 +78,7 @@ The codebase uses a large number of small, focused files, consistent error handl
 
 **File**: `src/review/processor.ts`, lines 188-249
 **Code**:
+
 ```typescript
 const conflictResolutionEligible = canAutoResolveConflicts({
   enabled: config.autoResolveConflicts,
@@ -81,15 +86,17 @@ const conflictResolutionEligible = canAutoResolveConflicts({
   ...
 });
 ```
+
 **Issue**: When `REVIEW_POLICY=require_approval`, the review passes with `outcome: "pass"` but `requiresAdminApproval: true`. The `processPullRequest` function immediately proceeds to check conflict eligibility (line 188) with `reviewPassed: true` — before checking whether an admin has actually approved (that check is at line 164-170, but it does not prevent conflict resolution from starting).
 
-**Failure scenario**: The bot resolves conflicts and pushes a new commit, merging the PR *before* an admin has reviewed it. The `require_approval` policy is bypassed.
+**Failure scenario**: The bot resolves conflicts and pushes a new commit, merging the PR _before_ an admin has reviewed it. The `require_approval` policy is bypassed.
 
 **Fix**: Add `&& !disposition.requiresAdminApproval` to the conflict eligibility condition, or move the conflict resolution block after the admin approval check.
 
 ### C6. Duplicated `isNotFoundError` across 5 files
 
 **Files**:
+
 - `src/review/processor.ts:1065`
 - `src/chat/processor.ts:307`
 - `src/webhook/processor.ts:516`
@@ -97,6 +104,7 @@ const conflictResolutionEligible = canAutoResolveConflicts({
 - `src/repository/knowledge.ts:87`
 
 **Code** (identical in all):
+
 ```typescript
 function isNotFoundError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "status" in error && error.status === 404;
@@ -146,6 +154,7 @@ function isNotFoundError(error: unknown): boolean {
 **Code**: The `default` case in the switch returns `value` (the string) as-is, which then fails the `z.boolean()` parse. The error message is unhelpful — it will say "Expected boolean, received string" without showing the actual value.
 
 **Fix**: Add a more descriptive error:
+
 ```typescript
 default:
   throw new Error(`Invalid boolean value: "${value}". Expected true/false/1/0/yes/no/on/off.`);
@@ -155,6 +164,7 @@ default:
 
 **Files**: `src/review/processor.ts`, lines 1375-1381
 **Code**:
+
 ```typescript
 export function isRecheckComment(body: string): boolean {
   return body.trim() === RECHECK_COMMENT_COMMAND;
@@ -215,6 +225,7 @@ See C3. The `formatFailureMessage` produces better user-facing error messages th
 
 **File**: `src/review/policy.ts`, line 143
 **Code**:
+
 ```typescript
 function normalizeReviewMode(value: string): ReviewMode {
   return value === "strict" ? "strict" : "normal";
@@ -235,13 +246,14 @@ No test covers the `replace_all` behavior of `Edit` tool. This is not a codebase
 
 **Needs Discussion**
 
-| Category | Count | Severity |
-|----------|-------|----------|
-| CRITICAL (Blocking) | 6 | C1-C6 |
-| REQUIRED | 8 | R1-R8 |
-| SUGGESTION | 10 | S1-S10 |
+| Category            | Count | Severity |
+| ------------------- | ----- | -------- |
+| CRITICAL (Blocking) | 6     | C1-C6    |
+| REQUIRED            | 8     | R1-R8    |
+| SUGGESTION          | 10    | S1-S10   |
 
 **Must fix before next release**:
+
 - C1: Wire `MergeGuard` into `processor.ts` (prevents duplicate merge race)
 - C2: Wire or remove `MetricsCollector` (half-shipped observability)
 - C3: Wire or remove `failureMessages.ts` (dead code)
@@ -251,11 +263,13 @@ No test covers the `replace_all` behavior of `Edit` tool. This is not a codebase
 - R3: Fix `GOOSE_MODEL` default
 
 **Should fix but not blocking**:
+
 - R2: Extract type-guard helpers
 - R8: Improve `waitForMergeable` polling
 - S9: Clean up `"lenient"` mode handling
 
 **No action needed** (confirmed clean):
+
 - Security posture (container isolation, credential redaction, path traversal protection, snapshot sanitization) is strong
 - Config schema validation is thorough
 - All existing tests pass and are well-structured

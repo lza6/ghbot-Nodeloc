@@ -190,17 +190,19 @@ export async function processPullRequest(
   }
 
   const mergeablePullRequest = await waitForMergeable(octokit, owner, repo, pullNumber);
-  const conflictResolutionEligible = !disposition.requiresAdminApproval && canAutoResolveConflicts({
-    enabled: config.autoResolveConflicts,
-    reviewPassed: true,
-    mergeable: mergeablePullRequest.mergeable,
-    mergeableState: mergeablePullRequest.mergeable_state,
-    baseRepository: `${owner}/${repo}`,
-    headRepository: pullRequest.head.repo?.full_name ?? null,
-    maintainerCanModify: pullRequest.maintainer_can_modify ?? false,
-    expectedHeadSha: pullRequest.head.sha,
-    currentHeadSha: currentPullRequest.head.sha
-  });
+  const conflictResolutionEligible =
+    !disposition.requiresAdminApproval &&
+    canAutoResolveConflicts({
+      enabled: config.autoResolveConflicts,
+      reviewPassed: true,
+      mergeable: mergeablePullRequest.mergeable,
+      mergeableState: mergeablePullRequest.mergeable_state,
+      baseRepository: `${owner}/${repo}`,
+      headRepository: pullRequest.head.repo?.full_name ?? null,
+      maintainerCanModify: pullRequest.maintainer_can_modify ?? false,
+      expectedHeadSha: pullRequest.head.sha,
+      currentHeadSha: currentPullRequest.head.sha
+    });
   if (conflictResolutionEligible) {
     const worktree = process.env.GHBOT_PR_WORKTREE;
     if (!gitToken || !worktree) {
@@ -927,7 +929,10 @@ async function maybeMergePullRequest(
   }
 
   if (mergeGuard.isAlreadyAttempted(owner, repo, pullNumber)) {
-    logger.info({ owner, repo, pullNumber }, "Skipping merge because MergeGuard already attempted it.");
+    logger.info(
+      { owner, repo, pullNumber },
+      "Skipping merge because MergeGuard already attempted it."
+    );
     metrics.recordMergeAttempt("already_merged");
     return;
   }
@@ -1061,11 +1066,6 @@ async function hasCurrentHeadApprovalFrom(
   }
 
   return false;
-}
-
-function errorHasStatus(error: unknown, key: string, expected: number): boolean {
-  const candidate = error as Record<string, unknown>;
-  return typeof candidate[key] === "number" && candidate[key] === expected;
 }
 
 function reviewProgressMarker(headSha: string): string {
