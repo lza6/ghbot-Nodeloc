@@ -255,10 +255,23 @@ All changes must pass the local gates before push; CI ([.github/workflows/ci.yml
 npm run typecheck    # TypeScript strict check
 npm run lint         # ESLint (flat config)
 npm run format:check # Prettier formatting
-npm test             # node:test suite
+npm test             # node:test suite (currently 329 passing)
 ```
 
 The optional webhook service exposes `GET /healthz` and `GET /metrics` (Prometheus text format) for probes and dashboards. The production-hardening change ledger and quiz live at [docs/reports/ghbot-production-hardening.html](docs/reports/ghbot-production-hardening.html).
+
+### v2.0 observability and reliability additions
+
+v2.0 added three supporting modules and hardened the merge/review pipeline:
+
+- **`src/metrics/collector.ts`** — `MetricsCollector` for Actions runs (review duration, outcomes, goose calls, conflict resolutions, merge attempts, cache hits). `snapshot()` and `formatMarkdown()` render a GitHub-flavored summary table.
+- **`src/ai/failureMessages.ts`** — `categorizeFailure` (timeout / auth / rate_limit / network / model / validation / unknown) and `formatFailureMessage` produce actionable failure text; wired into the goose error path.
+- **`src/review/merge-guard.ts`** — in-process duplicate-merge prevention used around `pulls.merge`.
+- **`src/review/staleness.ts`** — `evaluateReviewStaleness` decides whether a head-sha change during a review should be appended or discarded.
+- **`src/github/errors.ts`** — shared `isNotFoundError` / `isAlreadyMergedError` helpers, replacing five local duplicates.
+- **`src/webhook/queueStore.ts`** — optional durable delivery queue (default off) so webhook tasks survive a process restart.
+
+These were introduced by the changes documented in [docs/audit-v2-final.md](docs/audit-v2-final.md) and [docs/report-v2.html](docs/report-v2.html).
 
 ## Local development
 
