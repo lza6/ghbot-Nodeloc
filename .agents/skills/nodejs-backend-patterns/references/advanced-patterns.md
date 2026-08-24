@@ -54,29 +54,17 @@ container.singleton(
       password: process.env.DB_PASSWORD,
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    }),
+      connectionTimeoutMillis: 2000
+    })
 );
 
-container.singleton(
-  "userRepository",
-  () => new UserRepository(container.resolve("db")),
-);
+container.singleton("userRepository", () => new UserRepository(container.resolve("db")));
 
-container.singleton(
-  "userService",
-  () => new UserService(container.resolve("userRepository")),
-);
+container.singleton("userService", () => new UserService(container.resolve("userRepository")));
 
-container.register(
-  "userController",
-  () => new UserController(container.resolve("userService")),
-);
+container.register("userController", () => new UserController(container.resolve("userService")));
 
-container.singleton(
-  "authService",
-  () => new AuthService(container.resolve("userRepository")),
-);
+container.singleton("authService", () => new AuthService(container.resolve("userRepository")));
 ```
 
 ## Database Patterns
@@ -95,7 +83,7 @@ const poolConfig: PoolConfig = {
   password: process.env.DB_PASSWORD,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 2000
 };
 
 export const pool = new Pool(poolConfig);
@@ -128,7 +116,7 @@ const connectDB = async () => {
     await mongoose.connect(process.env.MONGODB_URI!, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      socketTimeoutMS: 45000
     });
 
     console.log("MongoDB connected");
@@ -163,11 +151,11 @@ const userSchema = new Schema<IUser>(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    password: { type: String, required: true }
   },
   {
-    timestamps: true,
-  },
+    timestamps: true
+  }
 );
 
 // Indexes
@@ -194,7 +182,7 @@ export class OrderService {
       // Create order
       const orderResult = await client.query(
         "INSERT INTO orders (user_id, total) VALUES ($1, $2) RETURNING id",
-        [userId, calculateTotal(items)],
+        [userId, calculateTotal(items)]
       );
       const orderId = orderResult.rows[0].id;
 
@@ -202,14 +190,14 @@ export class OrderService {
       for (const item of items) {
         await client.query(
           "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1, $2, $3, $4)",
-          [orderId, item.productId, item.quantity, item.price],
+          [orderId, item.productId, item.quantity, item.price]
         );
 
         // Update inventory
-        await client.query(
-          "UPDATE products SET stock = stock - $1 WHERE id = $2",
-          [item.quantity, item.productId],
-        );
+        await client.query("UPDATE products SET stock = stock - $1 WHERE id = $2", [
+          item.quantity,
+          item.productId
+        ]);
       }
 
       await client.query("COMMIT");
@@ -253,11 +241,11 @@ export class AuthService {
 
     const token = this.generateToken({
       userId: user.id,
-      email: user.email,
+      email: user.email
     });
 
     const refreshToken = this.generateRefreshToken({
-      userId: user.id,
+      userId: user.id
     });
 
     return {
@@ -266,17 +254,16 @@ export class AuthService {
       user: {
         id: user.id,
         name: user.name,
-        email: user.email,
-      },
+        email: user.email
+      }
     };
   }
 
   async refreshToken(refreshToken: string) {
     try {
-      const payload = jwt.verify(
-        refreshToken,
-        process.env.REFRESH_TOKEN_SECRET!,
-      ) as { userId: string };
+      const payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET!) as {
+        userId: string;
+      };
 
       const user = await this.userRepository.findById(payload.userId);
 
@@ -286,7 +273,7 @@ export class AuthService {
 
       const token = this.generateToken({
         userId: user.id,
-        email: user.email,
+        email: user.email
       });
 
       return { token };
@@ -297,13 +284,13 @@ export class AuthService {
 
   private generateToken(payload: any): string {
     return jwt.sign(payload, process.env.JWT_SECRET!, {
-      expiresIn: "15m",
+      expiresIn: "15m"
     });
   }
 
   private generateRefreshToken(payload: any): string {
     return jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET!, {
-      expiresIn: "7d",
+      expiresIn: "7d"
     });
   }
 }
@@ -321,7 +308,7 @@ const redis = new Redis({
   retryStrategy: (times) => {
     const delay = Math.min(times * 50, 2000);
     return delay;
-  },
+  }
 });
 
 export class CacheService {
@@ -353,11 +340,7 @@ export class CacheService {
 
 // Cache decorator
 export function Cacheable(ttl: number = 300) {
-  return function (
-    target: any,
-    propertyKey: string,
-    descriptor: PropertyDescriptor,
-  ) {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     const originalMethod = descriptor.value;
 
     descriptor.value = async function (...args: any[]) {
@@ -387,16 +370,11 @@ export function Cacheable(ttl: number = 300) {
 import { Response } from "express";
 
 export class ApiResponse {
-  static success<T>(
-    res: Response,
-    data: T,
-    message?: string,
-    statusCode = 200,
-  ) {
+  static success<T>(res: Response, data: T, message?: string, statusCode = 200) {
     return res.status(statusCode).json({
       status: "success",
       message,
-      data,
+      data
     });
   }
 
@@ -404,17 +382,11 @@ export class ApiResponse {
     return res.status(statusCode).json({
       status: "error",
       message,
-      ...(errors && { errors }),
+      ...(errors && { errors })
     });
   }
 
-  static paginated<T>(
-    res: Response,
-    data: T[],
-    page: number,
-    limit: number,
-    total: number,
-  ) {
+  static paginated<T>(res: Response, data: T[], page: number, limit: number, total: number) {
     return res.json({
       status: "success",
       data,
@@ -422,8 +394,8 @@ export class ApiResponse {
         page,
         limit,
         total,
-        pages: Math.ceil(total / limit),
-      },
+        pages: Math.ceil(total / limit)
+      }
     });
   }
 }

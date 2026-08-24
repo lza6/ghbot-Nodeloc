@@ -74,8 +74,14 @@ export function validateRepositoryKnowledge(content: string): void {
   }
 }
 
+/**
+ * Normalize repository knowledge to a stable LF line-ending form so a
+ * knowledge round trip through git checkouts, editors, or the agent
+ * scratch directory is byte-identical on every platform.
+ */
 export function normalizeKnowledge(content: string): string {
-  return `${content.trim()}\n`;
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  return `${normalized}\n`;
 }
 
 function isNotFoundError(error: unknown): boolean {

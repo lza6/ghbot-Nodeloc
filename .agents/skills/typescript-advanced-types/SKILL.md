@@ -335,7 +335,7 @@ class APIClient<Config extends Record<string, Record<HTTPMethod, any>>> {
           {
             params: ExtractParams<Config[Path][Method]>;
             body?: ExtractBody<Config[Path][Method]>;
-          },
+          }
         ]
   ): Promise<ExtractResponse<Config[Path][Method]>> {
     // Implementation here
@@ -350,12 +350,12 @@ const users = await api.request("/users", "GET");
 // Type: User[]
 
 const newUser = await api.request("/users", "POST", {
-  body: { name: "John", email: "john@example.com" },
+  body: { name: "John", email: "john@example.com" }
 });
 // Type: User
 
 const user = await api.request("/users/:id", "GET", {
-  params: { id: "123" },
+  params: { id: "123" }
 });
 // Type: User
 ```
@@ -376,11 +376,7 @@ type OptionalKeys<T> = {
 }[keyof T];
 
 type IsComplete<T, S> =
-  RequiredKeys<T> extends keyof S
-    ? S[RequiredKeys<T>] extends undefined
-      ? false
-      : true
-    : false;
+  RequiredKeys<T> extends keyof S ? (S[RequiredKeys<T>] extends undefined ? false : true) : false;
 
 class Builder<T, S extends BuilderState<T> = {}> {
   private state: S = {} as S;
@@ -404,11 +400,7 @@ interface User {
 
 const builder = new Builder<User>();
 
-const user = builder
-  .set("id", "1")
-  .set("name", "John")
-  .set("email", "john@example.com")
-  .build(); // OK: all required fields set
+const user = builder.set("id", "1").set("name", "John").set("email", "john@example.com").build(); // OK: all required fields set
 
 // const incomplete = builder
 //   .set("id", "1")
@@ -515,24 +507,24 @@ const validator = new FormValidator<LoginForm>({
   email: [
     {
       validate: (v) => v.includes("@"),
-      message: "Email must contain @",
+      message: "Email must contain @"
     },
     {
       validate: (v) => v.length > 0,
-      message: "Email is required",
-    },
+      message: "Email is required"
+    }
   ],
   password: [
     {
       validate: (v) => v.length >= 8,
-      message: "Password must be at least 8 characters",
-    },
-  ],
+      message: "Password must be at least 8 characters"
+    }
+  ]
 });
 
 const errors = validator.validate({
   email: "invalid",
-  password: "short",
+  password: "short"
 });
 // Type: { email?: string[]; password?: string[]; } | null
 ```
@@ -586,9 +578,7 @@ type Event =
 function reducer(state: State, event: Event): State {
   switch (state.type) {
     case "idle":
-      return event.type === "FETCH"
-        ? { type: "fetching", requestId: event.requestId }
-        : state;
+      return event.type === "FETCH" ? { type: "fetching", requestId: event.requestId } : state;
     case "fetching":
       if (event.type === "SUCCESS") {
         return { type: "success", data: event.data };
@@ -634,10 +624,7 @@ function isString(value: unknown): value is string {
   return typeof value === "string";
 }
 
-function isArrayOf<T>(
-  value: unknown,
-  guard: (item: unknown) => item is T,
-): value is T[] {
+function isArrayOf<T>(value: unknown, guard: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.every(guard);
 }
 
@@ -681,11 +668,7 @@ function processValue(value: unknown) {
 
 ```typescript
 // Type assertion tests
-type AssertEqual<T, U> = [T] extends [U]
-  ? [U] extends [T]
-    ? true
-    : false
-  : false;
+type AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false;
 
 type Test1 = AssertEqual<string, string>; // true
 type Test2 = AssertEqual<string, number>; // false

@@ -26,7 +26,15 @@ const reviewDecisionSchema = z.object({
   })
 });
 
+type PromptRunner = (prompt: string, options?: { timeoutMs?: number }) => Promise<string>;
+
 export class GooseReviewer {
+  private readonly promptRunner: PromptRunner;
+
+  constructor(promptRunner: PromptRunner = runGoosePrompt) {
+    this.promptRunner = promptRunner;
+  }
+
   async review(input: {
     title: string;
     body: string | null;
@@ -38,7 +46,7 @@ export class GooseReviewer {
     return withRetry(
       "goose.run.review",
       async () => {
-        const raw = await runGoosePrompt(buildPrompt(input));
+        const raw = await this.promptRunner(buildPrompt(input));
         const parsed = reviewDecisionSchema.parse(JSON.parse(raw));
         const { decision, warnings } = normalizeReviewDecision(
           parsed,

@@ -47,10 +47,15 @@ export async function withRetry<T>(
   options?: {
     maxAttempts?: number;
     baseDelayMs?: number;
+    retryable?: (error: unknown) => boolean;
+    maxTotalTimeoutMs?: number;
   }
 ): Promise<T> {
   const maxAttempts = options?.maxAttempts ?? MAX_ATTEMPTS;
   const baseDelayMs = options?.baseDelayMs ?? BASE_DELAY_MS;
+  const retryableCheck = options?.retryable ?? isRetryableError;
+  const maxTotalTimeoutMs = options?.maxTotalTimeoutMs;
+  const startTime = Date.now();
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -59,22 +64,34 @@ export async function withRetry<T>(
     } catch (error) {
       lastError = error;
 
+      if (maxTotalTimeoutMs !== undefined) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= maxTotalTimeoutMs) {
+          logger.warn(
+            { error, label, attempt, maxAttempts, elapsed, maxTotalTimeoutMs },
+            "Request failed; maxTotalTimeout exceeded."
+          );
+          break;
+        }
+      }
+
       logger.warn(
         {
           error,
           label,
           attempt,
           maxAttempts,
-          retryable: isRetryableError(error)
+          retryable: retryableCheck(error)
         },
         "Request failed."
       );
 
-      if (attempt === maxAttempts || !isRetryableError(error)) {
+      if (attempt === maxAttempts || !retryableCheck(error)) {
         break;
       }
 
-      await delay(baseDelayMs * attempt);
+      const jitter = 0.5 + Math.random() * 0.5;
+      await delay(baseDelayMs * attempt * jitter);
     }
   }
 

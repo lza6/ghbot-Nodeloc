@@ -68,9 +68,9 @@ const fastify = Fastify({
     level: process.env.LOG_LEVEL || "info",
     transport: {
       target: "pino-pretty",
-      options: { colorize: true },
-    },
-  },
+      options: { colorize: true }
+    }
+  }
 });
 
 // Plugins
@@ -91,15 +91,15 @@ fastify.post<{
         required: ["name", "email"],
         properties: {
           name: { type: "string", minLength: 1 },
-          email: { type: "string", format: "email" },
-        },
-      },
-    },
+          email: { type: "string", format: "email" }
+        }
+      }
+    }
   },
   async (request, reply) => {
     const { name, email } = request.body;
     return { id: "123", name };
-  },
+  }
 );
 
 await fastify.listen({ port: 3000, host: "0.0.0.0" });
@@ -203,7 +203,7 @@ export class UserService {
     // Create user
     const user = await this.userRepository.create({
       ...userData,
-      password: hashedPassword,
+      password: hashedPassword
     });
 
     // Remove password from response
@@ -248,19 +248,13 @@ import { CreateUserDTO, UpdateUserDTO, UserEntity } from "../types/user.types";
 export class UserRepository {
   constructor(private db: Pool) {}
 
-  async create(
-    userData: CreateUserDTO & { password: string },
-  ): Promise<UserEntity> {
+  async create(userData: CreateUserDTO & { password: string }): Promise<UserEntity> {
     const query = `
       INSERT INTO users (name, email, password)
       VALUES ($1, $2, $3)
       RETURNING id, name, email, password, created_at, updated_at
     `;
-    const { rows } = await this.db.query(query, [
-      userData.name,
-      userData.email,
-      userData.password,
-    ]);
+    const { rows } = await this.db.query(query, [userData.name, userData.email, userData.password]);
     return rows[0];
   }
 
@@ -280,9 +274,7 @@ export class UserRepository {
     const fields = Object.keys(updates);
     const values = Object.values(updates);
 
-    const setClause = fields
-      .map((field, idx) => `${field} = $${idx + 2}`)
-      .join(", ");
+    const setClause = fields.map((field, idx) => `${field} = $${idx + 2}`).join(", ");
 
     const query = `
       UPDATE users
@@ -330,11 +322,7 @@ declare global {
   }
 }
 
-export const authenticate = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
@@ -383,14 +371,14 @@ export const validate = (schema: AnyZodObject) => {
       await schema.parseAsync({
         body: req.body,
         query: req.query,
-        params: req.params,
+        params: req.params
       });
       next();
     } catch (error) {
       if (error instanceof ZodError) {
         const errors = error.errors.map((err) => ({
           field: err.path.join("."),
-          message: err.message,
+          message: err.message
         }));
         next(new ValidationError("Validation failed", errors));
       } else {
@@ -407,8 +395,8 @@ const createUserSchema = z.object({
   body: z.object({
     name: z.string().min(1),
     email: z.string().email(),
-    password: z.string().min(8),
-  }),
+    password: z.string().min(8)
+  })
 });
 
 router.post("/users", validate(createUserSchema), userController.createUser);
@@ -424,29 +412,29 @@ import Redis from "ioredis";
 
 const redis = new Redis({
   host: process.env.REDIS_HOST,
-  port: parseInt(process.env.REDIS_PORT || "6379"),
+  port: parseInt(process.env.REDIS_PORT || "6379")
 });
 
 export const apiLimiter = rateLimit({
   store: new RedisStore({
     client: redis,
-    prefix: "rl:",
+    prefix: "rl:"
   }),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
   message: "Too many requests from this IP, please try again later",
   standardHeaders: true,
-  legacyHeaders: false,
+  legacyHeaders: false
 });
 
 export const authLimiter = rateLimit({
   store: new RedisStore({
     client: redis,
-    prefix: "rl:auth:",
+    prefix: "rl:auth:"
   }),
   windowMs: 15 * 60 * 1000,
   max: 5, // Stricter limit for auth endpoints
-  skipSuccessfulRequests: true,
+  skipSuccessfulRequests: true
 });
 ```
 
@@ -461,15 +449,11 @@ const logger = pino({
   level: process.env.LOG_LEVEL || "info",
   transport: {
     target: "pino-pretty",
-    options: { colorize: true },
-  },
+    options: { colorize: true }
+  }
 });
 
-export const requestLogger = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
 
   // Log response when finished
@@ -481,7 +465,7 @@ export const requestLogger = (
       status: res.statusCode,
       duration: `${duration}ms`,
       userAgent: req.headers["user-agent"],
-      ip: req.ip,
+      ip: req.ip
     });
   });
 
@@ -501,7 +485,7 @@ export class AppError extends Error {
   constructor(
     public message: string,
     public statusCode: number = 500,
-    public isOperational: boolean = true,
+    public isOperational: boolean = true
   ) {
     super(message);
     Object.setPrototypeOf(this, AppError.prototype);
@@ -512,7 +496,7 @@ export class AppError extends Error {
 export class ValidationError extends AppError {
   constructor(
     message: string,
-    public errors?: any[],
+    public errors?: any[]
   ) {
     super(message, 400);
   }
@@ -551,17 +535,12 @@ import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/errors";
 import { logger } from "./logger.middleware";
 
-export const errorHandler = (
-  err: Error,
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => {
+export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       status: "error",
       message: err.message,
-      ...(err instanceof ValidationError && { errors: err.errors }),
+      ...(err instanceof ValidationError && { errors: err.errors })
     });
   }
 
@@ -570,24 +549,21 @@ export const errorHandler = (
     error: err.message,
     stack: err.stack,
     url: req.url,
-    method: req.method,
+    method: req.method
   });
 
   // Don't leak error details in production
-  const message =
-    process.env.NODE_ENV === "production"
-      ? "Internal server error"
-      : err.message;
+  const message = process.env.NODE_ENV === "production" ? "Internal server error" : err.message;
 
   res.status(500).json({
     status: "error",
-    message,
+    message
   });
 };
 
 // Async error wrapper
 export const asyncHandler = (
-  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>,
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<any>
 ) => {
   return (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -600,6 +576,7 @@ export const asyncHandler = (
 Node.js supports both SQL and NoSQL databases. Use connection pooling for all production databases.
 
 Key patterns covered in [references/advanced-patterns.md](references/advanced-patterns.md):
+
 - **PostgreSQL with connection pool** — `pg` Pool configuration and graceful shutdown
 - **MongoDB with Mongoose** — connection management and schema definition
 - **Transaction pattern** — `BEGIN`/`COMMIT`/`ROLLBACK` with `pg` client

@@ -21,7 +21,7 @@ if (!fs.existsSync(gitDir)) {
 fs.mkdirSync(hooksDir, { recursive: true });
 
 // git hooks 以仓库根为工作目录，相对路径在 Windows 与 POSIX 下都可靠。
-const hookScript = ["#!/bin/sh", 'node scripts/husky-pre-commit.cjs'].join("\n");
+const hookScript = ["#!/bin/sh", "node scripts/husky-pre-commit.cjs"].join("\n");
 
 fs.writeFileSync(hookPath, `${hookScript}\n`, { mode: 0o755 });
 console.log(`[install-husky] 已写入 git pre-commit 钩子: ${hookPath}`);

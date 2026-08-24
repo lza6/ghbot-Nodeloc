@@ -1,9 +1,10 @@
-# ghbot Production Hardening
-
-> 终局审计变更说明与验收测验。对照当前仓库真实实现，不包装未验证项。
+# ghbot Production Hardening > 终局审计变更说明与验收测验。对照当前仓库真实实现，不包装未验证项。
 
 <title>ghbot Hardening Ledger</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap"
+/>
 <style>
   :root {
     --paper: #f3f0ea;
@@ -44,8 +45,15 @@
     --code: #0f141b;
   }
 
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--paper); color: var(--ink); }
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+  }
   body {
     font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
     line-height: 1.55;
@@ -55,15 +63,31 @@
     margin: 0 auto;
     padding: 2.5rem 1.25rem 5rem;
   }
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     font-family: "Source Serif 4", Georgia, serif;
     text-wrap: balance;
     font-weight: 700;
   }
-  h1 { font-size: 2.1rem; margin: 0 0 0.4rem; }
-  h2 { font-size: 1.35rem; margin: 2.2rem 0 0.7rem; border-top: 1px solid var(--line); padding-top: 1.2rem; }
-  p, li { color: var(--ink); }
-  .lede { color: var(--muted); max-width: 62ch; }
+  h1 {
+    font-size: 2.1rem;
+    margin: 0 0 0.4rem;
+  }
+  h2 {
+    font-size: 1.35rem;
+    margin: 2.2rem 0 0.7rem;
+    border-top: 1px solid var(--line);
+    padding-top: 1.2rem;
+  }
+  p,
+  li {
+    color: var(--ink);
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 62ch;
+  }
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -75,14 +99,41 @@
     border: 1px solid var(--line);
     padding: 0.85rem 0.95rem;
   }
-  .stat b { display: block; font-family: "IBM Plex Mono", monospace; font-size: 1.05rem; }
-  .stat span { color: var(--muted); font-size: 0.82rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-  th, td { text-align: left; padding: 0.45rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .ok { color: var(--ok); font-weight: 600; }
-  .warn { color: var(--warn); font-weight: 600; }
-  .bad { color: var(--bad); font-weight: 600; }
-  code, pre {
+  .stat b {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 1.05rem;
+  }
+  .stat span {
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 0.45rem 0.4rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .ok {
+    color: var(--ok);
+    font-weight: 600;
+  }
+  .warn {
+    color: var(--warn);
+    font-weight: 600;
+  }
+  .bad {
+    color: var(--bad);
+    font-weight: 600;
+  }
+  code,
+  pre {
     font-family: "IBM Plex Mono", ui-monospace, monospace;
     font-size: 0.86rem;
   }
@@ -97,8 +148,14 @@
     border: 1px solid var(--line);
     padding: 1rem 1.1rem 1.2rem;
   }
-  .q { margin: 1rem 0 0.4rem; font-weight: 600; }
-  label { display: block; margin: 0.2rem 0; }
+  .q {
+    margin: 1rem 0 0.4rem;
+    font-weight: 600;
+  }
+  label {
+    display: block;
+    margin: 0.2rem 0;
+  }
   button {
     margin-top: 1rem;
     background: var(--ink);
@@ -108,12 +165,24 @@
     font: inherit;
     cursor: pointer;
   }
-  button:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #score { margin-top: 0.8rem; font-weight: 600; }
-  .hidden-answer { display: none; }
+  button:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  #score {
+    margin-top: 0.8rem;
+    font-weight: 600;
+  }
+  .hidden-answer {
+    display: none;
+  }
 </style>
 
-<p class="lede">这份报告对应 ghbot 生产硬化批次：合并 SHA 钉死、冲突锁、webhook/代理超时、配置交叉校验，以及本地门禁与 HTTP 冒烟。测验覆盖真实行为，不是口号。</p>
+<p class="lede">
+  这份报告对应 ghbot 生产硬化批次：合并 SHA
+  钉死、冲突锁、webhook/代理超时、配置交叉校验，以及本地门禁与 HTTP
+  冒烟。测验覆盖真实行为，不是口号。
+</p>
 
 <div class="grid">
   <div class="stat"><b>148</b><span>本地测试通过（本批次实测）</span></div>
@@ -124,33 +193,98 @@
 
 <h2>改了什么，为什么</h2>
 <table>
-  <thead><tr><th>守卫</th><th>故障模式</th><th>落地</th></tr></thead>
+  <thead>
+    <tr>
+      <th>守卫</th>
+      <th>故障模式</th>
+      <th>落地</th>
+    </tr>
+  </thead>
   <tbody>
-    <tr><td>合并 SHA</td><td>审查后 head 变化仍 merge</td><td><code>pulls.merge(sha)</code> + live head 复检</td></tr>
-    <tr><td>冲突锁</td><td>同一 PR 并发改共享 worktree</td><td>进程内 per-PR lock + 失败 hard reset</td></tr>
-    <tr><td>git/代理/进程</td><td>无超时、输出无限增长</td><td>timeout + 1MB 输出帽 + abort</td></tr>
-    <tr><td>webhook</td><td>慢客户端/超大包拖死</td><td>30s body、413、顶层 catch</td></tr>
-    <tr><td>配置</td><td>半套 R2 / webhook 无 secret</td><td>zod superRefine fail-fast</td></tr>
-    <tr><td>评论命令</td><td>失败被吃掉，Actions 显示成功</td><td>allSettled + AggregateError</td></tr>
+    <tr>
+      <td>合并 SHA</td>
+      <td>审查后 head 变化仍 merge</td>
+      <td><code>pulls.merge(sha)</code> + live head 复检</td>
+    </tr>
+    <tr>
+      <td>冲突锁</td>
+      <td>同一 PR 并发改共享 worktree</td>
+      <td>进程内 per-PR lock + 失败 hard reset</td>
+    </tr>
+    <tr>
+      <td>git/代理/进程</td>
+      <td>无超时、输出无限增长</td>
+      <td>timeout + 1MB 输出帽 + abort</td>
+    </tr>
+    <tr>
+      <td>webhook</td>
+      <td>慢客户端/超大包拖死</td>
+      <td>30s body、413、顶层 catch</td>
+    </tr>
+    <tr>
+      <td>配置</td>
+      <td>半套 R2 / webhook 无 secret</td>
+      <td>zod superRefine fail-fast</td>
+    </tr>
+    <tr>
+      <td>评论命令</td>
+      <td>失败被吃掉，Actions 显示成功</td>
+      <td>allSettled + AggregateError</td>
+    </tr>
   </tbody>
 </table>
 
 <h2>需求追踪摘要</h2>
 <table>
-  <thead><tr><th>需求</th><th>状态</th><th>证据</th></tr></thead>
+  <thead>
+    <tr>
+      <th>需求</th>
+      <th>状态</th>
+      <th>证据</th>
+    </tr>
+  </thead>
   <tbody>
-    <tr><td>生产安全红线（凭据/PR 代码/缓存复用）</td><td class="ok">已闭环（静态+测试）</td><td>sanitization/secrets、snapshot 排除、cache 只作增量上下文</td></tr>
-    <tr><td>部署一次能跑</td><td class="warn">部分闭环</td><td>文档/env 已对齐；真实 GitHub App 安装未在本机复现</td></tr>
-    <tr><td>事件失败可见</td><td class="ok">已闭环</td><td>comment AggregateError；webhook 401/413/503</td></tr>
-    <tr><td>审查结果可信</td><td class="ok">已闭环</td><td>normalizeReviewDecision + 状态横幅</td></tr>
-    <tr><td>7.1 事件路由器拆分</td><td class="warn">未做（有意）</td><td>无事件环测试床，拆 1700 行 processor 风险高于收益</td></tr>
-    <tr><td>6.4 全站 i18n</td><td class="warn">未闭环</td><td>仅 chat 按评论语言；审查正文仍英文</td></tr>
-    <tr><td>付费 LLM E2E</td><td class="warn">外部受限</td><td>未调用真实 Goose/OpenAI</td></tr>
+    <tr>
+      <td>生产安全红线（凭据/PR 代码/缓存复用）</td>
+      <td class="ok">已闭环（静态+测试）</td>
+      <td>sanitization/secrets、snapshot 排除、cache 只作增量上下文</td>
+    </tr>
+    <tr>
+      <td>部署一次能跑</td>
+      <td class="warn">部分闭环</td>
+      <td>文档/env 已对齐；真实 GitHub App 安装未在本机复现</td>
+    </tr>
+    <tr>
+      <td>事件失败可见</td>
+      <td class="ok">已闭环</td>
+      <td>comment AggregateError；webhook 401/413/503</td>
+    </tr>
+    <tr>
+      <td>审查结果可信</td>
+      <td class="ok">已闭环</td>
+      <td>normalizeReviewDecision + 状态横幅</td>
+    </tr>
+    <tr>
+      <td>7.1 事件路由器拆分</td>
+      <td class="warn">未做（有意）</td>
+      <td>无事件环测试床，拆 1700 行 processor 风险高于收益</td>
+    </tr>
+    <tr>
+      <td>6.4 全站 i18n</td>
+      <td class="warn">未闭环</td>
+      <td>仅 chat 按评论语言；审查正文仍英文</td>
+    </tr>
+    <tr>
+      <td>付费 LLM E2E</td>
+      <td class="warn">外部受限</td>
+      <td>未调用真实 Goose/OpenAI</td>
+    </tr>
   </tbody>
 </table>
 
 <h2>验证证据</h2>
-<pre>npm run typecheck    → 0 errors
+<pre>
+npm run typecheck    → 0 errors
 npm test             → 148/148 pass
 npm run lint         → 0 errors
 npm run format:check → pass
@@ -162,7 +296,9 @@ webhook HTTP smoke   → see E2E section in repo docs</pre>
 <ul>
   <li>没有把审查编排拆成独立 router（7.1）。</li>
   <li>没有把全部评论文案做成中英字典（6.4）。</li>
-  <li>没有 goose CLI 二进制 checksum 钉死（安装脚本仍从 GitHub 拉指定 tag 的 download_cli.sh）。</li>
+  <li>
+    没有 goose CLI 二进制 checksum 钉死（安装脚本仍从 GitHub 拉指定 tag 的 download_cli.sh）。
+  </li>
   <li>没有对 origin <code>lezi-fun/ghbot</code> 推送（账号无权限）。</li>
 </ul>
 
@@ -171,64 +307,89 @@ webhook HTTP smoke   → see E2E section in repo docs</pre>
   <p>提交后显示分数。通过线 80%（8/10）。未提交前不显示答案。</p>
   <form id="quiz">
     <div class="q">1. AUTO_MERGE 的代码默认值是？</div>
-    <label><input type="radio" name="q1" value="a"> true</label>
-    <label><input type="radio" name="q1" value="b"> false</label>
-    <label><input type="radio" name="q1" value="c"> inherit GitHub</label>
+    <label><input type="radio" name="q1" value="a" /> true</label>
+    <label><input type="radio" name="q1" value="b" /> false</label>
+    <label><input type="radio" name="q1" value="c" /> inherit GitHub</label>
 
     <div class="q">2. 合并时如何防止审查后 head 被替换？</div>
-    <label><input type="radio" name="q2" value="a"> 只看缓存决策</label>
-    <label><input type="radio" name="q2" value="b"> pulls.merge 传入审查时的 sha，并 live GET 复检</label>
-    <label><input type="radio" name="q2" value="c"> force push 回去</label>
+    <label><input type="radio" name="q2" value="a" /> 只看缓存决策</label>
+    <label
+      ><input type="radio" name="q2" value="b" /> pulls.merge 传入审查时的 sha，并 live GET
+      复检</label
+    >
+    <label><input type="radio" name="q2" value="c" /> force push 回去</label>
 
     <div class="q">3. WEBHOOK_SECRET 应该等于 webhook URL 吗？</div>
-    <label><input type="radio" name="q3" value="a"> 应该，方便记忆</label>
-    <label><input type="radio" name="q3" value="b"> 不应该，必须是独立 HMAC 密钥</label>
+    <label><input type="radio" name="q3" value="a" /> 应该，方便记忆</label>
+    <label><input type="radio" name="q3" value="b" /> 不应该，必须是独立 HMAC 密钥</label>
 
     <div class="q">4. 同一 PR 两个 /conflict 同时跑会怎样？</div>
-    <label><input type="radio" name="q4" value="a"> 共享 worktree 并行 merge</label>
-    <label><input type="radio" name="q4" value="b"> 第二个获取锁失败</label>
+    <label><input type="radio" name="q4" value="a" /> 共享 worktree 并行 merge</label>
+    <label><input type="radio" name="q4" value="b" /> 第二个获取锁失败</label>
 
     <div class="q">5. R2 只配了 endpoint 没有密钥时？</div>
-    <label><input type="radio" name="q5" value="a"> 静默跳过</label>
-    <label><input type="radio" name="q5" value="b"> 启动/解析配置失败</label>
+    <label><input type="radio" name="q5" value="a" /> 静默跳过</label>
+    <label><input type="radio" name="q5" value="b" /> 启动/解析配置失败</label>
 
     <div class="q">6. issue_comment 里 /recheck 抛错时？</div>
-    <label><input type="radio" name="q6" value="a"> 整个 job 仍标成功</label>
-    <label><input type="radio" name="q6" value="b"> 其他 handler 仍跑，最后 AggregateError 让 Actions 失败可重试</label>
+    <label><input type="radio" name="q6" value="a" /> 整个 job 仍标成功</label>
+    <label
+      ><input type="radio" name="q6" value="b" /> 其他 handler 仍跑，最后 AggregateError 让 Actions
+      失败可重试</label
+    >
 
     <div class="q">7. 审查 finding 指向 PR 里不存在的文件？</div>
-    <label><input type="radio" name="q7" value="a"> 原样提交 inline</label>
-    <label><input type="radio" name="q7" value="b"> normalize 丢掉并记 warning</label>
+    <label><input type="radio" name="q7" value="a" /> 原样提交 inline</label>
+    <label><input type="radio" name="q7" value="b" /> normalize 丢掉并记 warning</label>
 
     <div class="q">8. Goose 容器能拿到真实 GOOSE_API_KEY 吗？</div>
-    <label><input type="radio" name="q8" value="a"> 能，方便调试</label>
-    <label><input type="radio" name="q8" value="b"> 不能，只用一次性代理 token</label>
+    <label><input type="radio" name="q8" value="a" /> 能，方便调试</label>
+    <label><input type="radio" name="q8" value="b" /> 不能，只用一次性代理 token</label>
 
     <div class="q">9. 本批次是否声称真实付费 LLM 端到端已跑通？</div>
-    <label><input type="radio" name="q9" value="a"> 是</label>
-    <label><input type="radio" name="q9" value="b"> 否，外部调用未测</label>
+    <label><input type="radio" name="q9" value="a" /> 是</label>
+    <label><input type="radio" name="q9" value="b" /> 否，外部调用未测</label>
 
     <div class="q">10. origin lezi-fun/ghbot 推送状态？</div>
-    <label><input type="radio" name="q10" value="a"> 已推送</label>
-    <label><input type="radio" name="q10" value="b"> 403，改推 lza6/ghbot-Nodeloc</label>
+    <label><input type="radio" name="q10" value="a" /> 已推送</label>
+    <label><input type="radio" name="q10" value="b" /> 403，改推 lza6/ghbot-Nodeloc</label>
 
     <button type="submit">提交测验</button>
   </form>
   <div id="score"></div>
 </div>
 <script>
-  const answers = {q1:"b",q2:"b",q3:"b",q4:"b",q5:"b",q6:"b",q7:"b",q8:"b",q9:"b",q10:"b"};
+  const answers = {
+    q1: "b",
+    q2: "b",
+    q3: "b",
+    q4: "b",
+    q5: "b",
+    q6: "b",
+    q7: "b",
+    q8: "b",
+    q9: "b",
+    q10: "b"
+  };
   document.getElementById("quiz").addEventListener("submit", function (e) {
     e.preventDefault();
     const form = e.target;
     let score = 0;
     const total = Object.keys(answers).length;
     for (const [name, expected] of Object.entries(answers)) {
-      const picked = form.querySelector('input[name="'+name+'"]:checked');
+      const picked = form.querySelector('input[name="' + name + '"]:checked');
       if (picked && picked.value === expected) score += 1;
     }
     const pct = Math.round((score / total) * 100);
     const pass = pct >= 80;
-    document.getElementById("score").textContent = "得分 " + score + "/" + total + "（" + pct + "%）。" + (pass ? "通过。" : "未通过，对照报告再答。");
+    document.getElementById("score").textContent =
+      "得分 " +
+      score +
+      "/" +
+      total +
+      "（" +
+      pct +
+      "%）。" +
+      (pass ? "通过。" : "未通过，对照报告再答。");
   });
 </script>

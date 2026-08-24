@@ -465,7 +465,7 @@ export function buildPullRequestDuplicatePrompt(params: {
   ].join("\n");
 }
 
-function buildTriagePrompt(
+export function buildTriagePrompt(
   kind: TriageKind,
   target: TriageTarget,
   candidates: TriageCandidate[]
@@ -571,6 +571,6 @@ async function postDuplicateFeedback(
   });
 }
 
-function labelName(label: string | { name?: string | null }): string {
+export function labelName(label: string | { name?: string | null }): string {
   return typeof label === "string" ? label : (label.name ?? "");
 }

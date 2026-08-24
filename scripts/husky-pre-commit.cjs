@@ -17,7 +17,9 @@ function run(cmd) {
 // 1) 暂存区生成物防护：graft/、.codegraph/、.code-review-graph/、dist/ 等不允许进仓库。
 const staged = run("git diff --cached --name-only").split("\n").filter(Boolean);
 const blockedPrefixes = ["graft/", ".codegraph/", ".code-review-graph/", "dist/", ".ghbot-tmp/"];
-const blocked = staged.filter((file) => blockedPrefixes.some((p) => file === p.slice(0, -1) || file.startsWith(p)));
+const blocked = staged.filter((file) =>
+  blockedPrefixes.some((p) => file === p.slice(0, -1) || file.startsWith(p))
+);
 if (blocked.length > 0) {
   console.error("[pre-commit] BLOCKED：以下生成物/索引文件被暂存，已拒绝提交：");
   blocked.forEach((f) => console.error(`  - ${f}`));
@@ -33,7 +35,13 @@ if (changedTs.length > 0) {
   const tsc = run("npm run typecheck");
   if (tsc && /error TS\d+/.test(tsc)) {
     console.error("[pre-commit] TypeScript 类型错误，已阻止提交：");
-    console.error(tsc.split("\n").filter((l) => /error TS/.test(l)).slice(0, 20).join("\n"));
+    console.error(
+      tsc
+        .split("\n")
+        .filter((l) => /error TS/.test(l))
+        .slice(0, 20)
+        .join("\n")
+    );
     process.exit(1);
   }
 }

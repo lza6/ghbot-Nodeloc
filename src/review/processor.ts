@@ -1070,7 +1070,7 @@ function reviewProgressMarker(headSha: string): string {
   return `${REVIEW_PROGRESS_MARKER_PREFIX} head=${headSha} -->`;
 }
 
-function shortSha(headSha: string): string {
+export function shortSha(headSha: string): string {
   return headSha.slice(0, 12);
 }
 
@@ -1716,7 +1716,7 @@ function extractReviewStateMarker(body: string | null | undefined): string {
   );
 }
 
-function shouldFallbackToCommentReview(
+export function shouldFallbackToCommentReview(
   error: unknown,
   event: "APPROVE" | "COMMENT" | "REQUEST_CHANGES"
 ): boolean {

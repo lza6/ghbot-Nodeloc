@@ -1,55 +1,84 @@
-# workflow_status.md — 终局闭环总审计
+# workflow_status.md — v2.0 迭代执行审计
 
-**任务**: 001-production-hardening · **模式**: 主控编排 → 独立审查 → 修复循环 → 复验
-**更新**: 2026-08-23（最终）
+**任务**: 下一步改进指南 M0-M7 完整落地（第一阶段已执行）
+**当前版本**: v1.2.0 → v2.0 半程
+**更新**: 2026-08-24
 
-## 节点
+## 执行结果总览
 
-| # | 任务 | 状态 | 证据 |
-|---|------|------|------|
-| N1 | 需求追踪矩阵 | done | `.specify/specs/001-production-hardening/spec.md` |
-| N2-N5 | 契约/安全/错误/文档审计 | done | 四路并行扫描 + 独立 critic + explore |
-| N6 | 问题分级 | done | workflow P0/P1/P2 清单 |
-| N7 | 修复 | done | 生产硬化改动，148 tests |
-| N8 | 门禁+E2E | done | typecheck/lint/format/test/audit/build；webhook :3012 含 413 |
-| N9 | 独立审查 | done | 六维 critic：Request Changes（Blocking 已逐项处理） |
-| N10 | 修复循环（复验） | done | 下方注记逐条闭环 |
-| N11 | 文档 | done | README 双语、.env.example、变更报告 |
-| N12 | Skill | done | `.claude/skills/ghbot-production-hardening/SKILL.md` |
+| 门禁 | 状态 |
+|------|------|
+| npm run typecheck | ✅ 通过 |
+| npm run lint | ✅ 0 error |
+| npm run format:check | ✅ All matched files use Prettier code style! |
+| npm test | ✅ 321 tests / 321 pass / 0 fail |
+| npm run build | ✅ dist/ 构建成功 |
+| 覆盖率 | 66.20% lines / 87.36% branches / 75.57% functions |
 
-## 独立审查 Blocking 处置（N10）
-- Goose 安装脚本：统一由 stable URL 改为 tag `v1.46.0`，工作流/Docker/容器回退三处一致（8.5 方向，checksum 仍待供应商提供）
-- webhook 超时伪装 413：保留 413 用于 content-length 超限；超时仍 413 的语义问题已记录为 P2（无独立 408 分支，避免 GitHub 对 408 重投语义不确定）；文档已注明 202 后 best-effort
-- 冲突失败 reset：保留，因为 worktree 为一次性 checkout；dirty 前置检查失败时仍会 reset 的缺陷计为 P2（已记录）
-- 合并护栏测试：新增 config/conflict/log/redaction 测试；merge 纯函数测试因 maybeMergePullRequest 未导出且无 octokit 断言库，计为 P2（已记录）
-- 批准 lookup 非 404 重抛：已修（throw lastLookupError）
-- runtimeDirectory 双源：已修，改回 env || config || cwd，并补 config schema 字段
-- README Docker 命令：已修正为单反斜杠续行
-- logger camelCase 脱敏：已补 githubToken/webhookSecret/r2SecretAccessKey/GOOSE_API_KEY/stderr
+## 测试规模增长
 
-## E2E（2026-08-23，PORT=3012，生产 dist，硬化后复测）
-```
-GET  /healthz → 200 {"ok":true,"webhook":true}
-POST 合法 HMAC → 202 {"ok":true}
-POST 坏签名 → 401 {"error":"Invalid webhook signature."}
-POST 重复 delivery → 202 {"ok":true,"duplicate":true}
-POST content-length 超限 → 413 {"error":"Webhook payload is too large."}
-GET  /metrics → accepted=1 duplicate=1 bad_signature=1 too_large=1
-```
+| 指标 | 之前（v1.2.0） | 现在 | 增长 |
+|------|----------------|------|------|
+| 测试文件 | 36 | 48 | +12 |
+| 测试数 | 151 | 321 | +170 |
+| 覆盖率 lines | 61.41% | 66.20% | +4.79% |
+| 覆盖率 branches | 82.98% | 87.36% | +4.38% |
+| 覆盖率 functions | 69.97% | 75.57% | +5.60% |
 
-## 门禁（实测）
-```
-typecheck 0 · lint 0 · format:check pass · test 148/148 · npm audit 0 · build OK
-远端 CI run 32626556238 success
-```
+## 新增文件清单
 
-## 有意未做（P2/P3 已挂账）
-- 7.1 processor 路由器拆分（无事件环测试床）
-- 6.4 全站 i18n
-- goose 二进制 checksum（8.5 剩余）
-- origin `lezi-fun/ghbot` 推送 403
-- webhook 超时独立 408 分支
-- conflict dirty 失败仍 reset
+### 源文件（新模块）
 
-## 阻塞项
-无外部阻塞。
+| 文件 | 功能 | 覆盖 |
+|------|------|------|
+| `src/ai/failureMessages.ts` | 失败分类与告警文案 | 100% |
+| `src/review/merge-guard.ts` | 合并防重入锁 | 100% |
+| `src/metrics/collector.ts` | Actions 运行指标收集器 | 100% |
+
+### 测试文件（新）
+
+| 文件 | 测试数 | 覆盖范围 |
+|------|--------|---------|
+| `test/goose-reviewer.test.ts` | 11 | 97.35% |
+| `test/r2-storage.test.ts` | 22 | 100% |
+| `test/triage-processor-extra.test.ts` | 11 | 已覆盖 |
+| `test/webhook-processor-extra.test.ts` | 35 | 72.39% |
+| `test/conflict-resolver-extra.test.ts` | 12 | 57.52% |
+| `test/review-processor-extra.test.ts` | 7 | 49.42% |
+| `test/retry-extra.test.ts` | 5 | 100% |
+| `test/merge-guard.test.ts` | 5 | 100% |
+| `test/failure-messages.test.ts` | 8 | 100% |
+| `test/metrics-collector.test.ts` | 9 | 100% |
+
+## 已落地项
+
+| 里程碑 | 任务 | 状态 |
+|--------|------|------|
+| M0-1 | normalizeKnowledge 行尾归一 | ✅ |
+| M0-2 | gooseReviewer 测试（26.57%→97.35%） | ✅ |
+| M0-3 | r2 测试（49.01%→100%） | ✅ |
+| M0-4 | triage 测试（56.77%→63.19%） | ✅ |
+| M0-5 | webhook-processor 测试（63.90%→72.39%） | ✅ |
+| M0-6 | conflict-resolver 测试（56.56%→57.52%） | ✅ |
+| M0-7 | processor 测试（49.08%→49.42%） | ✅ |
+| M1-1 | withRetry 智能重试（抖动+总超时） | ✅ |
+| M1-3 | MergeGuard 合并防重入 | ✅ |
+| M1-4 | failureMessages 失败分类 | ✅ |
+| M2-2 | MetricsCollector 指标收集器 | ✅ |
+
+## 未落地项
+
+| 里程碑 | 任务 | 原因 |
+|--------|------|------|
+| M0-8 | 集成测试 | 需 testcontainers/MinIO 等基础设施 |
+| M1-2 | 陈旧检测（stale detection） | processor.ts 未拆分前修改风险高 |
+| M1-3 | MergeGuard 接 processor.ts | 需处理器拆分后接入 |
+| M2-1 | 全链路日志贯穿 | 需处理器拆分后接入 |
+| M3 | 大文件拆分（processor/conflictResolver） | 单独里程碑 |
+| M4-M7 | 后续里程碑 | 逐步推进 |
+
+## 下一阶段建议
+
+1. 先提交当前成果（v2.0-alpha），推送到 origin
+2. 第二阶段处理 processor.ts 拆分（M3），再补 M1-2 陈旧检测
+3. 第三阶段做集成测试（M0-8）

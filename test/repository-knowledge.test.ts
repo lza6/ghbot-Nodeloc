@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   loadRepositoryKnowledge,
+  normalizeKnowledge,
   readKnowledgeScratch,
   saveRepositoryKnowledgeCache,
   validateRepositoryKnowledge,
@@ -59,6 +60,13 @@ test("loading an empty repository knowledge cache initializes the persisted file
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
+});
+
+test("normalizeKnowledge normalizes CRLF and CR line endings to LF", () => {
+  assert.equal(normalizeKnowledge("# A\r\n\r\nB\r\n"), "# A\n\nB\n");
+  assert.equal(normalizeKnowledge("# A\rB\r"), "# A\nB\n");
+  assert.equal(normalizeKnowledge("x\n".repeat(100)), `${"x\n".repeat(100)}`);
+  assert.equal(normalizeKnowledge("# A\n\nB\n"), "# A\n\nB\n");
 });
 
 test("repository knowledge rejects credentials and oversized content", () => {
