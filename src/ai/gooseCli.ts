@@ -7,6 +7,7 @@ import process from "node:process";
 import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { startOneRunApiProxy } from "./apiProxy.js";
+import { categorizeFailure, formatFailureMessage } from "./failureMessages.js";
 import { tempRootDirectory } from "../runtimePaths.js";
 import { redactSecrets } from "../security/secrets.js";
 
@@ -100,6 +101,14 @@ export async function runGoosePrompt(
     return extractGooseFinalText(stdout);
   } catch (error) {
     primaryError = error;
+    const category = categorizeFailure(error);
+    logger.warn({ error, category, model: config.gooseModel }, "goose prompt failed.");
+    logger.debug(
+      {
+        failureMessage: formatFailureMessage(category, { action: "goose.run.prompt", attempts: 1 })
+      },
+      "goose failure summary"
+    );
     throw error;
   } finally {
     await removeDirectoryBestEffort(tempDir, "goose prompt temp directory", primaryError);

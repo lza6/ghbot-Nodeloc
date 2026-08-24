@@ -1412,8 +1412,16 @@ async function closeMaliciousPullRequest(
   });
 }
 
+const MAX_MERGEABLE_WAIT_MS = 30_000;
+const MERGEABLE_POLL_INTERVAL_MS = 1_000;
+const MAX_MERGEABLE_POLLS = 20;
+
 async function waitForMergeable(octokit: Octokit, owner: string, repo: string, pullNumber: number) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  const startedAt = Date.now();
+  for (let attempt = 0; attempt < MAX_MERGEABLE_POLLS; attempt += 1) {
+    if (Date.now() - startedAt > MAX_MERGEABLE_WAIT_MS) {
+      break;
+    }
     const { data } = await octokit.rest.pulls.get({
       owner,
       repo,
@@ -1424,7 +1432,7 @@ async function waitForMergeable(octokit: Octokit, owner: string, repo: string, p
       return data;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await new Promise((resolve) => setTimeout(resolve, MERGEABLE_POLL_INTERVAL_MS));
   }
 
   const { data } = await octokit.rest.pulls.get({
